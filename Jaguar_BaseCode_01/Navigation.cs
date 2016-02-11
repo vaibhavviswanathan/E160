@@ -54,16 +54,17 @@ namespace DrRobot.JaguarControl
         bool going_forward = true;
         bool increment_distance = false;
         double x_initial = 0;
+        double t_initial = 0;
         bool need_to_wait = false;
         double time1 = 0;
-        double dist_to_travel = 1.0;
+        double dist_to_travel = Math.PI / 18;
 
 
         #endregion
 
 
         #region Navigation Setup
-        
+
         // Constructor for the Navigation class
         public Navigation(JaguarCtrl jc)
         {
@@ -91,7 +92,7 @@ namespace DrRobot.JaguarControl
             x_est = 0;//initialX;
             y_est = 0;//initialY;
             t_est = 0;//initialT;
-            
+
             // Set desired state
             desiredX = 0;// initialX;
             desiredY = 0;// initialY;
@@ -122,9 +123,10 @@ namespace DrRobot.JaguarControl
             going_forward = true;
             increment_distance = false;
             x_initial = 0;
+            t_initial = 0;
             need_to_wait = false;
             time1 = 0;
-            dist_to_travel = 1.0;
+            dist_to_travel = Math.PI / 18;
 
 
         }
@@ -165,7 +167,7 @@ namespace DrRobot.JaguarControl
                 // functions to call here. For lab 1, we just call the function
                 // WallPositioning to have the robot maintain a constant distance
                 // to the wall (see lab manual).
-                
+
                 // Update Sensor Readings
                 UpdateSensorMeasurements();
 
@@ -203,7 +205,7 @@ namespace DrRobot.JaguarControl
                     // Actuate motors based actuateMotorL and actuateMotorR
                     ActuateMotors();
                 }
-                
+
                 // ****************** Additional Student Code: End   ************
 
                 // Log data
@@ -319,7 +321,7 @@ namespace DrRobot.JaguarControl
             {
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
-                String newData = time.ToString() + " " + x + " " + y + " " + t;
+                String newData = time.ToString() + " " + x + " " + y + " " + t + " " + wheelDistanceL + " " + wheelDistanceR;
 
                 logFile.WriteLine(newData);
             }
@@ -357,11 +359,11 @@ namespace DrRobot.JaguarControl
             motorSignalR = (short)signal; //desiredWheelSpeedL
             motorSignalL = (short)signal; //desiredWheelSpeedL'
             */
-            
+
 
             if (increment_distance)
             {
-                dist_to_travel = (dist_to_travel < 5)? dist_to_travel + 1 : 0;
+                dist_to_travel = (dist_to_travel < 8 * Math.PI) ? dist_to_travel + Math.PI / 18 : 50;
                 increment_distance = false;
             }
 
@@ -371,7 +373,7 @@ namespace DrRobot.JaguarControl
                 double time2 = ts2.TotalSeconds;
                 if (time2 - time1 > 10) need_to_wait = false;
             }
-            else forwardTest(dist_to_travel);
+            else if (dist_to_travel < 50) rotationTest(dist_to_travel);
 
         }
 
@@ -395,7 +397,7 @@ namespace DrRobot.JaguarControl
                 TimeSpan ts1 = DateTime.Now - startTime;
                 time1 = ts1.TotalSeconds;
                 need_to_wait = true;
-                
+
             }
             else {
                 // proportional control loop
@@ -408,22 +410,25 @@ namespace DrRobot.JaguarControl
                 motorSignalR = (short)signal; //desiredWheelSpeedR
                 motorSignalL = (short)signal; //desiredWheelSpeedL
             }
-                
-            
+
+
         }
 
         // This function is called to test the forward odometry
         private void rotationTest(double distance)
         {
             // compute target
-            double xtarget = going_forward ? x_initial + distance : x_initial - distance;
-            // move to target
-            if (Math.Abs(xtarget - x) < 0.1)
+            double t_target = -distance;
+            while (t_target < 0)
             {
-                x_initial = x;
-                if (!going_forward) increment_distance = true;
-                going_forward = !going_forward;
+                t_target = t_target + 2 * Math.PI;
+            }
+            t_target = (t_target > Math.PI * 2) ? t_target % (2 * Math.PI) : t_target;
+            t_est = (t < 0) ? t + 2 * Math.PI : t;
 
+            // move to target
+            if (Math.Abs(t_target - t_est) < (3.0 / 180.0) * Math.PI)
+            {
                 // stop motors
                 motorSignalL = 0;
                 motorSignalR = 0;
@@ -432,18 +437,19 @@ namespace DrRobot.JaguarControl
                 TimeSpan ts1 = DateTime.Now - startTime;
                 time1 = ts1.TotalSeconds;
                 need_to_wait = true;
+                increment_distance = true;
 
             }
             else {
                 // proportional control loop
-                double error = x - xtarget;
-                double k = -100;
-                double signal = error * k;
+                double error = t_est - t_target;
+                double k = 500;
+                double signal = Math.Abs(error) * k;
 
                 signal = Math.Min(200, Math.Max(-200, signal));
 
-                motorSignalR = (short)signal; //desiredWheelSpeedR
-                motorSignalL = (short)signal; //desiredWheelSpeedL
+                motorSignalR = (short)20; //desiredWheelSpeedR
+                motorSignalL = (short)(300); //desiredWheelSpeedL
             }
 
 
@@ -517,7 +523,7 @@ namespace DrRobot.JaguarControl
             lastEncoderPulseL = currentEncoderPulseL;
 
             // correct for rollover
-            diffEncoderPulseL = diffEncoderPulseL < -encoderMax / 2 ? 
+            diffEncoderPulseL = diffEncoderPulseL < -encoderMax / 2 ?
                 diffEncoderPulseL + encoderMax : diffEncoderPulseL;
             diffEncoderPulseR = diffEncoderPulseR < -encoderMax / 2 ?
                 diffEncoderPulseR + encoderMax : diffEncoderPulseR;
@@ -530,12 +536,12 @@ namespace DrRobot.JaguarControl
             diffEncoderPulseR = -diffEncoderPulseR;
 
             // compute distance travelled in timestep
-            wheelDistanceR = (diffEncoderPulseR * 2 * Math.PI * wheelRadius)/pulsesPerRotation; //check wheel r
-            wheelDistanceL = (diffEncoderPulseL * 2 * Math.PI * wheelRadius)/pulsesPerRotation; //check wheel r
+            wheelDistanceR = (diffEncoderPulseR * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
+            wheelDistanceL = (diffEncoderPulseL * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
 
             // compute angle and distance travelled
             distanceTravelled = (wheelDistanceR + wheelDistanceL) / 2;
-            angleTravelled = (wheelDistanceR - wheelDistanceL) / (2*robotRadius); //check robot radius
+            angleTravelled = (wheelDistanceR - wheelDistanceL) / (2 * robotRadius); //check robot radius
 
 
 
@@ -557,12 +563,12 @@ namespace DrRobot.JaguarControl
             // Make sure t stays between pi and -pi
 
             // Update the actual
-            x = x + distanceTravelled*Math.Cos(t+angleTravelled);
-            y = y + distanceTravelled*Math.Sin(t+angleTravelled);
+            x = x + distanceTravelled * Math.Cos(t + angleTravelled);
+            y = y + distanceTravelled * Math.Sin(t + angleTravelled);
             t = t + angleTravelled;
-            if (t> Math.PI)
+            if (t > Math.PI)
                 t = t - 2 * Math.PI;
-            else if (t< -Math.PI)
+            else if (t < -Math.PI)
                 t = t + 2 * Math.PI;
 
             Console.WriteLine(x);
