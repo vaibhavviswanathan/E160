@@ -1,9 +1,9 @@
 
 clear
 close all
-load rotationtestdata
+load rotationtestdata2
 
-
+%%
 global timestamp wheelDispL wheelDispR xm ym trot;
 
 hf = figure(2);
