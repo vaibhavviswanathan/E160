@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.IO;
+
 
 namespace DrRobot.JaguarControl
 {
@@ -20,10 +21,6 @@ namespace DrRobot.JaguarControl
         public double lastEncoderPulseL, lastEncoderPulseR;
         public double wheelDistanceR, wheelDistanceL;
         public double tiltAngle, zoom;
-        public double currentAccel_x, currentAccel_y, currentAccel_z;
-        public double lastAccel_x, lastAccel_y, lastAccel_z;
-        public double currentGyro_x, currentGyro_y, currentGyro_z;
-        public double last_v_x, last_v_y;
 
         public int robotType, controllerType;
         enum ROBOT_TYPE { SIMULATED, REAL };
@@ -34,42 +31,41 @@ namespace DrRobot.JaguarControl
         private AxDDrRobotSentinel_Simulator simulatedJaguar;
         private Thread controlThread;
         private short motorSignalL, motorSignalR;
-        private short desiredRotRateR, desiredRotRateL;
         public bool runThread = true;
         public bool loggingOn;
         StreamWriter logFile;
-        public int deltaT = 10;
+        public int deltaT = 50;
         private static int encoderMax = 32767;
         public int pulsesPerRotation = 190;
         public double wheelRadius = 0.089;
         public double robotRadius = 0.242;//0.232
         private double angleTravelled, distanceTravelled;
-        private double diffEncoderPulseL, diffEncoderPulseR;
-        private double maxVelocity = 0.25;
-        private double Kpho = 1;
-        private double Kalpha = 8;//4
-        private double Kbeta = -0.5;//-1.0;
-        const double alphaTrackingAccuracy = 0.20;
-        const double betaTrackingAccuracy = 0.10;
+        private double maxVelocity = 0.10;
+        const double Kpho = 2;
+        const double Kalpha = 4;
+        const double Kbeta = -1.0;//-1;
+        const double alphaTrackingAccuracy = 0.05;
+        const double betaTrackingAccuracy = 0.05;
         const double phoTrackingAccuracy = 0.10;
+        double desiredPos = 5;
         double time = 0;
         DateTime startTime;
 
-        public short K_P = 15;//15;
-        public short K_I = 0;//0;
-        public short K_D = 3;//3;
-        public short frictionComp = 8750;//8750;
-        public double e_sum_R, e_sum_L;
-        public double u_R = 0;
-        public double u_L = 0;
-        public double e_R = 0;
-        public double e_L = 0;
+        // global variables forwardTest
+        bool going_forward = true;
+        bool increment_distance = false;
+        double x_initial = 0;
+        double t_initial = 0;
+        bool need_to_wait = false;
+        double time1 = 0;
+        double dist_to_travel = Math.PI / 18;
+
 
         #endregion
 
 
         #region Navigation Setup
-        
+
         // Constructor for the Navigation class
         public Navigation(JaguarCtrl jc)
         {
@@ -78,7 +74,6 @@ namespace DrRobot.JaguarControl
             realJaguar = jc.realJaguar;
             simulatedJaguar = jc.simulatedJaguar;
             this.Initialize();
-
 
             // Start Control Thread
             controlThread = new Thread(new ThreadStart(runControlLoop));
@@ -124,6 +119,17 @@ namespace DrRobot.JaguarControl
             displayParticles = true;
             displayNodes = true;
             displaySimRobot = true;
+
+            // global variables forwardTest
+            going_forward = true;
+            increment_distance = false;
+            x_initial = 0;
+            t_initial = 0;
+            need_to_wait = false;
+            time1 = 0;
+            dist_to_travel = Math.PI / 18;
+
+
         }
 
         // This function is called from the dialogue window "Reset Button"
@@ -159,9 +165,10 @@ namespace DrRobot.JaguarControl
                 // ****************** Additional Student Code: Start ************
 
                 // Students can select what type of localization and control
-                // functions to call here. For lab 3, we just call the function
-                // FlyToSetPoint().
-                
+                // functions to call here. For lab 1, we just call the function
+                // WallPositioning to have the robot maintain a constant distance
+                // to the wall (see lab manual).
+
                 // Update Sensor Readings
                 UpdateSensorMeasurements();
 
@@ -171,12 +178,8 @@ namespace DrRobot.JaguarControl
                 // Update the global state of the robot - x,y,t (lab 2)
                 LocalizeRealWithOdometry();
 
-                // Update the global state of the robot - x,y,t (lab 2)
-                //LocalizeRealWithIMU();
-                
-
                 // Estimate the global state of the robot -x_est, y_est, t_est (lab 4)
-                LocalizeEstWithParticleFilter();
+                //LocalizeEstWithParticleFilter();
 
 
                 // If using the point tracker, call the function
@@ -192,26 +195,18 @@ namespace DrRobot.JaguarControl
                     }
 
                     // Drive the robot to 1meter from the wall. Otherwise, comment it out after lab 1. 
-                    //WallPositioning();
+                    WallPositioning();
 
                     // Drive the robot to a desired Point (lab 3)
                     FlyToSetPoint();
 
                     // Follow the trajectory instead of a desired point (lab 3)
-                    //TrackTrajectory();
-
-                    // Determine the desired PWM signals for desired wheel speeds
-                    CalcMotorSignals();
+                    TrackTrajectory();
 
                     // Actuate motors based actuateMotorL and actuateMotorR
-                    ActuateMotorsWithPWMControl();
+                    ActuateMotors();
                 }
-                else
-                {
-                    e_sum_L = 0;
-                    e_sum_R = 0;
-                }
-                
+
                 // ****************** Additional Student Code: End   ************
 
                 // Log data
@@ -240,16 +235,6 @@ namespace DrRobot.JaguarControl
                         lastEncoderPulseL = currentEncoderPulseL;
                         lastEncoderPulseR = currentEncoderPulseR;
                         gotFirstEncoder = true;
-
-                        currentAccel_x = jaguarControl.getAccel_x();
-                        currentAccel_y = jaguarControl.getAccel_y();
-                        currentAccel_z = jaguarControl.getAccel_z();
-                        lastAccel_x = currentAccel_x;
-                        lastAccel_y = currentAccel_y;
-                        lastAccel_z = currentAccel_z;
-                        last_v_x = 0;
-                        last_v_y = 0;
-
                     }
                     catch (Exception e) { }
                     counter++;
@@ -258,16 +243,10 @@ namespace DrRobot.JaguarControl
             }
             else
             {
-                currentEncoderPulseL = 0;
-                currentEncoderPulseR = 0;
                 lastEncoderPulseL = 0;
                 lastEncoderPulseR = 0;
-                lastAccel_x = 0;
-                lastAccel_y = 0;
-                lastAccel_z = 0;
-                last_v_x = 0;
-                last_v_y = 0;
-
+                currentEncoderPulseL = 0;
+                currentEncoderPulseR = 0;
             }
         }
 
@@ -290,16 +269,8 @@ namespace DrRobot.JaguarControl
                 // Get most recenct encoder measurements
                 try
                 {
-
-                    // Update IMU Measurements
-                    currentAccel_x = jaguarControl.getAccel_x();
-                    currentAccel_y = jaguarControl.getAccel_y();
-                    currentAccel_z = jaguarControl.getAccel_z();
-                   
-                    // Update Encoder Measurements
                     currentEncoderPulseL = jaguarControl.realJaguar.GetEncoderPulse4();
                     currentEncoderPulseR = jaguarControl.realJaguar.GetEncoderPulse5();
-
                 }
                 catch (Exception e)
                 {
@@ -307,57 +278,14 @@ namespace DrRobot.JaguarControl
             }
         }
 
-        // At every iteration of the control loop, this function calculates
-        // the PWM signal for corresponding desired wheel speeds.
-        public void CalcMotorSignals()
-        {
-            short zeroOutput = 16383;
-            short maxPosOutput = 32767;
-
-            // ****************** Additional Student Code: Start ************
-
-            // Students must set motorSignalL and motorSignalR. Make sure
-            // they are set between 0 and maxPosOutput. A PID control is
-            // suggested.
-
-            // The following settings are used to help develop the controller in simulation.
-            // They will be replaced when the actual jaguar is used.
-            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100);//(zeroOutput - u_R);
-
-            motorSignalL = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalL));
-            motorSignalR = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalR));
-
-            // ****************** Additional Student Code: End   ************
-
-        }
-
-        // At every iteration of the control loop, this function sends
-        // the width of a pulse for PWM control to the robot motors
-        public void ActuateMotorsWithPWMControl()
-        {
-            if (jaguarControl.Simulating())
-                simulatedJaguar.DcMotorPwmNonTimeCtrAll(0, 0, 0, motorSignalL, motorSignalR, 0);
-            else
-            {
-                jaguarControl.realJaguar.DcMotorPwmNonTimeCtrAll(0, 0, 0, motorSignalL, motorSignalR, 0);
-            }
-        }
-
         // At every iteration of the control loop, this function sends
         // desired wheel velocities (in pulses / second) to the robot motors
-        public void ActuateMotorsWithVelControl()
+        public void ActuateMotors()
         {
             if (jaguarControl.Simulating())
                 simulatedJaguar.DcMotorVelocityNonTimeCtrAll(0, 0, 0, motorSignalL, (short)(-motorSignalR), 0);
             else
-            {
-                // Setup Control
-                jaguarControl.realJaguar.SetDcMotorVelocityControlPID(3, K_P, K_D, K_I);
-                jaguarControl.realJaguar.SetDcMotorVelocityControlPID(4, K_P, K_D, K_I);
-
                 jaguarControl.realJaguar.DcMotorVelocityNonTimeCtrAll(0, 0, 0, motorSignalL, (short)(-motorSignalR), 0);
-            }
         }
         #endregion
 
@@ -394,7 +322,7 @@ namespace DrRobot.JaguarControl
             {
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
-                 String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString();
+                String newData = time.ToString() + " " + x + " " + y + " " + t + " " + wheelDistanceL + " " + wheelDistanceR;
 
                 logFile.WriteLine(newData);
             }
@@ -419,10 +347,119 @@ namespace DrRobot.JaguarControl
             // motorSignalL. Make sure the robot does not exceed 
             // maxVelocity!!!!!!!!!!!!
 
+            // Send Control signals, put negative on left wheel control
+            /*
+            double desiredPos = 1.0;
+            double calibratedPos = centralLaserRange * 0.0009844 - 0.2005;
+            double error = (calibratedPos - desiredPos);
+            double k = 100;
+            double signal = error * k;
+            
+            signal = Math.Min(200, Math.Max(-200, signal));
+
+            motorSignalR = (short)signal; //desiredWheelSpeedL
+            motorSignalL = (short)signal; //desiredWheelSpeedL'
+            */
 
 
-            // ****************** Additional Student Code: End   ************                
+            if (increment_distance)
+            {
+                dist_to_travel = (dist_to_travel < 8 * Math.PI) ? dist_to_travel + Math.PI / 18 : 50;
+                increment_distance = false;
+            }
+
+            if (need_to_wait)
+            {
+                TimeSpan ts2 = DateTime.Now - startTime;
+                double time2 = ts2.TotalSeconds;
+                if (time2 - time1 > 10) need_to_wait = false;
+            }
+            else if (dist_to_travel < 50) rotationTest(dist_to_travel);
+
         }
+
+        // This function is called to test the forward odometry
+        private void forwardTest(double distance)
+        {
+            // compute target
+            double xtarget = going_forward ? x_initial + distance : x_initial - distance;
+            // move to target
+            if (Math.Abs(xtarget - x) < 0.1)
+            {
+                x_initial = x;
+                if (!going_forward) increment_distance = true;
+                going_forward = !going_forward;
+
+                // stop motors
+                motorSignalL = 0;
+                motorSignalR = 0;
+
+                // tell controller to wait 10 seconds
+                TimeSpan ts1 = DateTime.Now - startTime;
+                time1 = ts1.TotalSeconds;
+                need_to_wait = true;
+
+            }
+            else {
+                // proportional control loop
+                double error = x - xtarget;
+                double k = -100;
+                double signal = error * k;
+
+                signal = Math.Min(200, Math.Max(-200, signal));
+
+                motorSignalR = (short)signal; //desiredWheelSpeedR
+                motorSignalL = (short)signal; //desiredWheelSpeedL
+            }
+
+
+        }
+
+        // This function is called to test the forward odometry
+        private void rotationTest(double distance)
+        {
+            // compute target
+            double t_target = -distance;
+            while (t_target < 0)
+            {
+                t_target = t_target + 2 * Math.PI;
+            }
+            t_target = (t_target > Math.PI * 2) ? t_target % (2 * Math.PI) : t_target;
+            t_est = (t < 0) ? t + 2 * Math.PI : t;
+
+            // move to target
+            if (Math.Abs(t_target - t_est) < (3.0 / 180.0) * Math.PI)
+            {
+                // stop motors
+                motorSignalL = 0;
+                motorSignalR = 0;
+
+                // tell controller to wait 10 seconds
+                TimeSpan ts1 = DateTime.Now - startTime;
+                time1 = ts1.TotalSeconds;
+                need_to_wait = true;
+                increment_distance = true;
+
+            }
+            else {
+                // proportional control loop
+                double error = t_est - t_target;
+                double k = 500;
+                double signal = Math.Abs(error) * k;
+
+                signal = Math.Min(200, Math.Max(-200, signal));
+
+                motorSignalR = (short)20; //desiredWheelSpeedR
+                motorSignalL = (short)(300); //desiredWheelSpeedL
+            }
+
+
+        }
+
+
+
+        // ****************** Additional Student Code: End   ************                
+
 
 
         // This function is called at every iteration of the control loop
@@ -436,6 +473,7 @@ namespace DrRobot.JaguarControl
             // Put code here to calculate motorSignalR and 
             // motorSignalL. Make sure the robot does not exceed 
             // maxVelocity!!!!!!!!!!!!
+
 
 
             // ****************** Additional Student Code: End   ************
@@ -467,7 +505,7 @@ namespace DrRobot.JaguarControl
         // and use those measurements to predict the RELATIVE forward 
         // motion and rotation of the robot. These are referred to as
         // distanceTravelled and angleTravelled respectively.
-        public void MotionPrediction()//CWiRobotSDK* m_MOTSDK_rob)
+        public void MotionPrediction()
         {
 
             // ****************** Additional Student Code: Start ************
@@ -475,7 +513,38 @@ namespace DrRobot.JaguarControl
             // Put code here to calculated distanceTravelled and angleTravelled.
             // You can set and use variables like diffEncoder1, currentEncoderPulse1,
             // wheelDistanceL, wheelRadius, encoderResolution etc. These are defined
-            // above.
+            // in the Robot.h file.
+
+            // compute diffEncoderPulses
+            double diffEncoderPulseR = currentEncoderPulseR - lastEncoderPulseR;
+            double diffEncoderPulseL = currentEncoderPulseL - lastEncoderPulseL;
+
+            // set previous encoder values
+            lastEncoderPulseR = currentEncoderPulseR;
+            lastEncoderPulseL = currentEncoderPulseL;
+
+            // correct for rollover
+            diffEncoderPulseL = diffEncoderPulseL < -encoderMax / 2 ?
+                diffEncoderPulseL + encoderMax : diffEncoderPulseL;
+            diffEncoderPulseR = diffEncoderPulseR < -encoderMax / 2 ?
+                diffEncoderPulseR + encoderMax : diffEncoderPulseR;
+            diffEncoderPulseL = diffEncoderPulseL > encoderMax / 2 ?
+                diffEncoderPulseL - encoderMax : diffEncoderPulseL;
+            diffEncoderPulseR = diffEncoderPulseR > encoderMax / 2 ?
+                diffEncoderPulseR - encoderMax : diffEncoderPulseR;
+
+            // reverse direction for right side
+            diffEncoderPulseR = -diffEncoderPulseR;
+
+            // compute distance travelled in timestep
+            wheelDistanceR = (diffEncoderPulseR * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
+            wheelDistanceL = (diffEncoderPulseL * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
+
+            // compute angle and distance travelled
+            distanceTravelled = (wheelDistanceR + wheelDistanceL) / 2;
+            angleTravelled = (wheelDistanceR - wheelDistanceL) / (2 * robotRadius); //check robot radius
+
+
 
 
 
@@ -495,19 +564,17 @@ namespace DrRobot.JaguarControl
             // Make sure t stays between pi and -pi
 
             // Update the actual
-            x = 0;
-            y = 0;
-            t = 0;
+            x = x + distanceTravelled * Math.Cos(t + angleTravelled);
+            y = y + distanceTravelled * Math.Sin(t + angleTravelled);
+            t = t + angleTravelled;
+            if (t > Math.PI)
+                t = t - 2 * Math.PI;
+            else if (t < -Math.PI)
+                t = t + 2 * Math.PI;
 
-
-            // ****************** Additional Student Code: End   ************
-        }
-        // This function will Localize the robot, i.e. set the robot position
-        // defined by x,y,t using the last position with angleTravelled and
-        // distance travelled.
-        public void LocalizeRealWithIMU()//CWiRobotSDK* m_MOTSDK_rob)
-        {
-            // ****************** Additional Student Code: Start ************
+            Console.WriteLine(x);
+            Console.WriteLine(y);
+            Console.WriteLine(t);
 
 
             // ****************** Additional Student Code: End   ************
