@@ -1,5 +1,6 @@
 
 clear
+clearvars -global
 close all
 load rotationtestdata
 
@@ -7,8 +8,8 @@ load rotationtestdata
 global timestamp wheelDispL wheelDispR xm ym trot;
 
 hf = figure(2);
-set(hf,'PaperUnits','Points');
-set(hf,'PaperPosition',[650,550,350,300]);
+set(hf,'Units','Points');
+set(hf,'Position',[650,550,350,300]);
 
 h1 = plot(xm,ym,'*', 'Color', [     0    0.4470    0.7410]);
 hold on
@@ -16,7 +17,7 @@ hold on
 a = quiver(xm,ym,cos(trot),sin(trot), 0.2);
 set(a,'Color', h1.Color);
 
-inds = [26, 256, 620, 920, 1230, 1550, 1900, 2230];
+inds = [26, 256, 620, 920, 1230, 1550, 1900];
 xj = xJag(inds);
 yj = yJag(inds);
 tj = tJag(inds);
@@ -26,16 +27,16 @@ set(a,'Color', h2.Color);
 a = plot(xJag,yJag);
 set(a,'Color', h2.Color);
 
-legend([h1,h2],{'True State', 'Estimated State'}, 'Location', 'NorthWest')
+legend([h1,h2],{'True State', 'Estimated State'}, 'Location', 'Best')
 
 xlabel 'x [m]'
 ylabel 'y [m]'
 
 grid on
 
-legend([h1,h2],{'True State', 'Estimated State'}, 'Location', 'NorthWest')
+legend([h1,h2],{'True State', 'Estimated State'}, 'Location', 'Best')
 
-
+title 'Full Circle Rotation Test'
 
 %%
 niter = 100;
@@ -71,8 +72,8 @@ eto = etop(inds);
 %%
 
 hf = figure(3);
-set(hf,'PaperUnits','Points');
-set(hf,'PaperPosition',[650,550,350,300]);
+set(hf,'Units','Points');
+set(hf,'Position',[650,550,350,300]);
 
 h1 = plot(xm,ym,'*', 'Color', [     0    0.4470    0.7410]);
 hold on
@@ -84,10 +85,10 @@ set(a,'Color', h1.Color);
 h2 = plot(xo,yo,'*', 'Color', [0.9290    0.6940    0.1250]);
 a = quiver(xo,yo,cos(to),sin(to), 0.2);
 set(a,'Color', h2.Color);
-a = quiver(xo,yo,cos(to-eto),sin(to-eto), 0.1);
-set(a,'Color', h2.Color);
-a = quiver(xo,yo,cos(to+eto),sin(to+eto), 0.1);
-set(a,'Color', h2.Color);
+% a = quiver(xo,yo,cos(to-eto),sin(to-eto), 0.1);
+% set(a,'Color', h2.Color);
+% a = quiver(xo,yo,cos(to+eto),sin(to+eto), 0.1);
+% set(a,'Color', h2.Color);
 a = plot(xop,yop);
 set(a,'Color', h2.Color);
 
@@ -107,8 +108,8 @@ ylabel 'y [m]'
 
 grid on
 
-legend([h1,h2],{'True State', 'Optimized State'}, 'Location', 'NorthWest')
+legend([h1,h2],{'True State', 'Optimized State'}, 'Location', 'Best')
 
-
+title 'Full Circle Rotation Test'
 
 % print -dpng -r500 RotTest.png

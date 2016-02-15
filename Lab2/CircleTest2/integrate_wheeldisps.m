@@ -9,9 +9,9 @@ ex = xx;
 ey = xx;
 et = xx;
 
-eRR = 0.1;
+eRR = 0.02;
 eRL = eRR;
-eb = 0.1;
+eb = 0.02;
 
 wdR = wdR*RR/0.089;
 wdL = wdL*RL/0.089;
@@ -23,7 +23,7 @@ dist_traveled = (wdR + wdL)/2;
 eDs = 0.5*sqrt(esL.^2 + esR.^2);
 
 angle_traveled = (wdR - wdL)/(2*b);
-eDt = sqrt( (1/2*b)^2 * (esL.^2 + esR.^2) +...
+eDt = sqrt( (1/(2*b))^2 * (esL.^2 + esR.^2) +...
     ((wdR - wdL)/(2*b^2)).^2 * eb^2);
 
 for i = 2:length(tt)
