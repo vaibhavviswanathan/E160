@@ -81,7 +81,7 @@ namespace DrRobot.JaguarControl
         private double int_error_R = 0;
 
         // TrackTrajectory variables
-        private double traj_i = 0;
+        private int traj_i = 0;
 
         #endregion
 
@@ -219,11 +219,11 @@ namespace DrRobot.JaguarControl
                     // Drive the robot to 1meter from the wall. Otherwise, comment it out after lab 1. 
                     //WallPositioning();
 
+                    // Follow the trajectory instead of a desired point (lab 3)
+                    TrackTrajectory();
+
                     // Drive the robot to a desired Point (lab 3)
                     FlyToSetPoint();
-
-                    // Follow the trajectory instead of a desired point (lab 3)
-                    //TrackTrajectory();
 
                     // Determine the desired PWM signals for desired wheel speeds
                     CalcMotorSignals();
@@ -663,8 +663,56 @@ namespace DrRobot.JaguarControl
         {
             // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
             // It will do so by altering the value of desired_x, desired_y, desired_t
-            double trajectory_x = { 1, 3, 5, 3, 1 };
-            double trajectory_y = { 1, 2, 3, 4, 5 };
+            double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
+            double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
+            int max_i = trajectory_x.Length;
+            
+            // increment i if within range of 
+            double x1 = trajectory_x[traj_i];
+            double y1 = trajectory_y[traj_i];
+            if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
+            {
+                if(traj_i < max_i - 1) traj_i++;
+                x1 = trajectory_x[traj_i];
+                y1 = trajectory_y[traj_i];
+            }
+            // if at least two more points to hit
+            if (traj_i < max_i - 1)
+            {
+                double x2 = trajectory_x[traj_i + 1];
+                double y2 = trajectory_y[traj_i + 1];
+
+                // TODO Vai's code to set desiredX, desiredY, desiredT
+                //This function creates a smooth circular trajectory between 3 points
+                // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
+                double ma = (y1-y)/(x1-x);
+                double mb = (y2-y1)/(x2-x1);
+
+                //compute center of circle
+                double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
+                double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
+
+                //compute radius of circle
+                double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
+
+                // Compute dT
+                double currT = Math.Atan2(y - yc, x - xc);
+                double currT1 = Math.Atan2(y1 - yc, x1 - xc);
+                double dT = Math.Sign(currT1-currT)*0.5/r;
+
+                //determine new desired state
+                desiredX = r * Math.Cos(currT + dT) + xc;
+                desiredY = r * Math.Sin(currT + dT) + yc;
+                desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
+            }
+            else // just try to go to the last point
+            {
+                desiredX = x1;
+                desiredY = y1;
+                desiredT = 0;
+            }
+
+
 
 
 
