@@ -470,9 +470,32 @@ namespace DrRobot.JaguarControl
 
             // ****************** Additional Student Code: Start ************
 
-            // Put code here to calculate motorSignalR and 
-            // motorSignalL. Make sure the robot does not exceed 
-            // maxVelocity!!!!!!!!!!!!
+            // Calculate delta X and delta Y
+            double delta_x = desiredX - x_est;
+            double delta_y = desiredY - y_est;
+
+            // Calculate state
+            double pho = Math.Sqrt(Math.Pow(delta_x, 2)+ Math.Pow(delta_y,2));
+            double alpha = -t + Math.Atan2(delta_y, delta_x); //check to be within -pi and pi
+            double beta = -t - alpha; //check to be within -pi and pi
+
+            // Make sure within -pi and pi
+            alpha = (alpha < -Math.PI) ? alpha + 2 * Math.PI : ((alpha > Math.PI) ? alpha - 2 * Math.PI : alpha);
+            beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
+
+            // Check to see if point is behind robot
+            bool behindRobot = (alpha < 0) ? true : false;
+
+            // adjust alpha if point is behind robot
+            alpha = (behindRobot) ? -t + Math.Atan2(-delta_y, -delta_x) : alpha;
+            alpha = (alpha < -Math.PI) ? alpha + 2 * Math.PI : ((alpha > Math.PI) ? alpha - 2 * Math.PI : alpha);
+
+            // calculate desired velocity 
+            double desiredV = (behindRobot) ? -Kpho * pho : Kpho * pho;
+            double desiredW = Kalpha * alpha + Kbeta * beta;
+
+            // desired wheel velocities
+            
 
 
 
