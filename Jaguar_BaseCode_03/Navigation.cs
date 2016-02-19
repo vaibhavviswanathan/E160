@@ -471,20 +471,30 @@ namespace DrRobot.JaguarControl
             // ****************** Additional Student Code: Start ************
 
             // Calculate delta X and delta Y
-            double delta_x = desiredX - x_est;
-            double delta_y = desiredY - y_est;
+            double delta_x = desiredX - x;
+            double delta_y = desiredY - y;
 
             // Calculate state
             double pho = Math.Sqrt(Math.Pow(delta_x, 2)+ Math.Pow(delta_y,2));
             double alpha = -t + Math.Atan2(delta_y, delta_x); //check to be within -pi and pi
-            double beta = -t - alpha; //check to be within -pi and pi
+            double beta = -t - alpha - desiredT; //check to be within -pi and pi
+
+            // Threshold errors
+            double epsilon_pho = 0.1; // m
+            double epsilon_alpha = 2 * (Math.PI / 180);
+            double epsilon_beta = epsilon_alpha;
+
+            pho = (Math.Abs(pho) < epsilon_pho) ? 0 : pho;
+            alpha = (Math.Abs(alpha) < epsilon_alpha) ? 0 : alpha;
+            beta = (Math.Abs(beta) < epsilon_beta) ? 0 : beta;
 
             // Make sure within -pi and pi
             alpha = (alpha < -Math.PI) ? alpha + 2 * Math.PI : ((alpha > Math.PI) ? alpha - 2 * Math.PI : alpha);
             beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
 
             // Check to see if point is behind robot
-            bool behindRobot = (alpha < 0) ? true : false;
+            bool behindRobot = (Math.Abs(alpha) > Math.PI/2) ? true : false;
+            Console.WriteLine(behindRobot);
 
             // adjust alpha if point is behind robot
             alpha = (behindRobot) ? -t + Math.Atan2(-delta_y, -delta_x) : alpha;
@@ -494,8 +504,19 @@ namespace DrRobot.JaguarControl
             double desiredV = (behindRobot) ? -Kpho * pho : Kpho * pho;
             double desiredW = Kalpha * alpha + Kbeta * beta;
 
+            // saturate desired velocity
+            double saturatedV = Math.Sign(desiredV) * Math.Max(Math.Abs(desiredV), 0.25);
+            // scale down W if V was saturated 
+            double saturatedW = saturatedV > 0 ? desiredW * (saturatedV / desiredV) : desiredW;
+
             // desired wheel velocities
-            
+            double L = 2*robotRadius;
+            double desiredRotRateL = (L * saturatedW - saturatedV) / wheelRadius;
+            double desiredRotRateR = (L * saturatedW + saturatedV) / wheelRadius;
+
+            // rad/s to encoder pulses per second and send to motors
+            motorSignalL = (short)(-desiredRotRateL * pulsesPerRotation / (2*Math.PI));
+            motorSignalR = (short)(desiredRotRateR * pulsesPerRotation / (2 * Math.PI));
 
 
 
