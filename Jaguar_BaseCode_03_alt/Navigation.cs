@@ -76,6 +76,13 @@ namespace DrRobot.JaguarControl
         public double e_R = 0;
         public double e_L = 0;
 
+        // PWM error globals
+        private double int_error_L = 0;
+        private double int_error_R = 0;
+
+        // TrackTrajectory variables
+        private double traj_i = 0;
+
         #endregion
 
 
@@ -137,6 +144,8 @@ namespace DrRobot.JaguarControl
             displaySimRobot = true;
 
             previousTime = DateTime.Now;
+
+            traj_i = 0;
         }
 
         // This function is called from the dialogue window "Reset Button"
@@ -632,11 +641,15 @@ namespace DrRobot.JaguarControl
 
             // desired wheel velocities
             double desiredWheelVelL = -(L * saturatedW - saturatedV);
-            desiredWheelVelL = Math.Sign(desiredWheelVelL) * Math.Min(Math.Abs(desiredWheelVelL), 0.25);
             double desiredWheelVelR = (L * saturatedW + saturatedV);
-            desiredWheelVelR = Math.Sign(desiredWheelVelR) * Math.Min(Math.Abs(desiredWheelVelR), 0.25);
-            desiredRotRateL = (short)(desiredWheelVelL / wheelRadius * pulsesPerRotation / (2 * Math.PI));
-            desiredRotRateR = (short)(desiredWheelVelR / wheelRadius * pulsesPerRotation / (2 * Math.PI));
+            double satWheelVelL = Math.Sign(desiredWheelVelL) * Math.Min(Math.Abs(desiredWheelVelL), 0.25);
+            double satWheelVelR = Math.Sign(desiredWheelVelR) * Math.Min(Math.Abs(desiredWheelVelR), 0.25);
+            if (Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL) < Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR))
+                satWheelVelR = desiredWheelVelR * Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL);
+            else
+                satWheelVelL = desiredWheelVelL * Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR);
+            desiredRotRateL = (short)(satWheelVelL / wheelRadius * pulsesPerRotation / (2 * Math.PI));
+            desiredRotRateR = (short)(satWheelVelR / wheelRadius * pulsesPerRotation / (2 * Math.PI));
 
 
 
@@ -648,6 +661,12 @@ namespace DrRobot.JaguarControl
         // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
         private void TrackTrajectory()
         {
+            // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
+            // It will do so by altering the value of desired_x, desired_y, desired_t
+            double trajectory_x = { 1, 3, 5, 3, 1 };
+            double trajectory_y = { 1, 2, 3, 4, 5 };
+
+
 
         }
 
