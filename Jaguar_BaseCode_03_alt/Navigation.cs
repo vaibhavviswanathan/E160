@@ -77,8 +77,8 @@ namespace DrRobot.JaguarControl
         public double e_L = 0;
 
         // PWM error globals
-        private double int_error_L = 0;
-        private double int_error_R = 0;
+        double errorLInt = 0;
+        double errorRInt = 0;
 
         // TrackTrajectory variables
         private int traj_i = 0;
@@ -356,17 +356,27 @@ namespace DrRobot.JaguarControl
             double errorL = desiredRotRateL - rotRateLest;
             double errorR = desiredRotRateR - rotRateRest;
 
+            errorLInt += errorL * measured_timestep;
+            errorRInt += errorR * measured_timestep;
+
+            double signalL = Kp_PWM * errorL + Ki_PWM * errorLInt;
+            double signalR = Kp_PWM * errorR + Ki_PWM * errorRInt;
 
             // The following settings are used to help develop the controller in simulation.
             // They will be replaced when the actual jaguar is used.
-            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100);//(zeroOutput - u_R);
+            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 + signalL);// (zeroOutput + u_L);
+            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 + signalR);//(zeroOutput - u_R);
 
            // motorSignalL = (short) -desiredRotRateL;
             //motorSignalR = desiredRotRateR;
 
             motorSignalL = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalL));
             motorSignalR = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalR));
+
+            double satsignalL = motorSignalL - zeroOutput;
+            double satsignalR = motorSignalR - zeroOutput;
+
+            // errorLInt += measured_timestep / Ki_PWM * (satsignalL - motorSignalR);
 
             // ****************** Additional Student Code: End   ************
 
@@ -698,7 +708,7 @@ namespace DrRobot.JaguarControl
                 // Compute dT
                 double currT = Math.Atan2(y - yc, x - xc);
                 double currT1 = Math.Atan2(y1 - yc, x1 - xc);
-                double dT = Math.Sign(currT1-currT)*0.5/r;
+                double dT = Math.Sign(currT1-currT)*0.3/r;
 
                 //determine new desired state
                 desiredX = r * Math.Cos(currT + dT) + xc;
