@@ -56,8 +56,8 @@ namespace DrRobot.JaguarControl
         private double diffEncoderPulseL, diffEncoderPulseR;
         private double maxVelocity = 0.25;
         private double Kpho = 1;
-        private double Kalpha = 8;//4
-        private double Kbeta = -0.5;//-1.0;
+        private double Kalpha = 4;//4
+        private double Kbeta = -0.2;//-1.0;
         const double alphaTrackingAccuracy = 0.20;
         const double betaTrackingAccuracy = 0.10;
         const double phoTrackingAccuracy = 0.10;
@@ -79,6 +79,9 @@ namespace DrRobot.JaguarControl
         // PWM error globals
         double errorLInt = 0;
         double errorRInt = 0;
+
+        double rotRateLest = 0;
+        double rotRateRest = 0;
 
         // TrackTrajectory variables
         private int traj_i = 0;
@@ -125,6 +128,9 @@ namespace DrRobot.JaguarControl
             // Reset Localization Variables
             wheelDistanceR = 0;
             wheelDistanceL = 0;
+
+            rotRateLest = 0;
+            rotRateRest = 0;
 
             // Zero actuator signals
             motorSignalL = 0;
@@ -220,7 +226,7 @@ namespace DrRobot.JaguarControl
                     //WallPositioning();
 
                     // Follow the trajectory instead of a desired point (lab 3)
-                    TrackTrajectory();
+                    //TrackTrajectory();
 
                     // Drive the robot to a desired Point (lab 3)
                     FlyToSetPoint();
@@ -347,11 +353,11 @@ namespace DrRobot.JaguarControl
             // suggested.
 
             double Kp_PWM, Ki_PWM;
-            Kp_PWM = 1;
-            Ki_PWM = 1;
+            Kp_PWM = 0;
+            Ki_PWM = 0;
 
-            double rotRateLest = (wheelDistanceL / wheelRadius)/measured_timestep;
-            double rotRateRest = (wheelDistanceR / wheelRadius) / measured_timestep;
+            rotRateLest = (wheelDistanceL / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestep;
+            rotRateRest = (wheelDistanceR / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestep;
 
             double errorL = desiredRotRateL - rotRateLest;
             double errorR = desiredRotRateR - rotRateRest;
@@ -365,7 +371,7 @@ namespace DrRobot.JaguarControl
             // The following settings are used to help develop the controller in simulation.
             // They will be replaced when the actual jaguar is used.
             motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 + signalL);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 + signalR);//(zeroOutput - u_R);
+            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 - signalR);//(zeroOutput - u_R);
 
            // motorSignalL = (short) -desiredRotRateL;
             //motorSignalR = desiredRotRateR;
@@ -444,7 +450,8 @@ namespace DrRobot.JaguarControl
             {
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
-                 String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString();
+                // String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString();
+                String newData = time.ToString() + " " + desiredRotRateL.ToString() + " " + wheelDistanceL.ToString() + " " + desiredRotRateR.ToString() + " " + wheelDistanceR.ToString();
 
                 logFile.WriteLine(newData);
             }
@@ -631,7 +638,7 @@ namespace DrRobot.JaguarControl
             {
                 beta = -t - desiredT;
                 beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
-                double KbetaNew = -Kbeta * 2;
+                double KbetaNew = -Kbeta;
                 desiredW = KbetaNew * beta;
                 desiredV = 0;
 
@@ -660,6 +667,10 @@ namespace DrRobot.JaguarControl
                 satWheelVelL = desiredWheelVelL * Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR);
             desiredRotRateL = (short)(satWheelVelL / wheelRadius * pulsesPerRotation / (2 * Math.PI));
             desiredRotRateR = (short)(satWheelVelR / wheelRadius * pulsesPerRotation / (2 * Math.PI));
+            
+            //desiredRotRateL = (short)pulsesPerRotation;
+            //desiredRotRateR = (short)pulsesPerRotation;
+
 
 
 
