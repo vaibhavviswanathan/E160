@@ -15,6 +15,7 @@ namespace DrRobot.JaguarControl
         public double x, y, t;
         public double x_est, y_est, t_est;
         public double desiredX, desiredY, desiredT;
+        double desiredX_prev, desiredY_prev, desiredT_prev;
 
         public double currentEncoderPulseL, currentEncoderPulseR;
         public double lastEncoderPulseL, lastEncoderPulseR;
@@ -86,6 +87,8 @@ namespace DrRobot.JaguarControl
         double rotRateLest = 0;
         double rotRateRest = 0;
 
+        bool within_tracking = false;
+
         // TrackTrajectory variables
         private int traj_i = 0;
 
@@ -128,6 +131,10 @@ namespace DrRobot.JaguarControl
             desiredY = 0;// initialY;
             desiredT = 0;// initialT;
 
+            desiredX_prev = 0;
+            desiredY_prev = 0;
+            desiredT_prev = 0;
+
             // Reset Localization Variables
             wheelDistanceR = 0;
             wheelDistanceL = 0;
@@ -159,7 +166,9 @@ namespace DrRobot.JaguarControl
             measured_timestepL = 0;
             measured_timestepR = 0;
 
-            traj_i = 0;
+            traj_i = 1;
+
+            bool within_tracking = false;
         }
 
         // This function is called from the dialogue window "Reset Button"
@@ -206,18 +215,7 @@ namespace DrRobot.JaguarControl
 
                 // Update the global state of the robot - x,y,t (lab 2)
                 LocalizeRealWithOdometry();
-                DateTime currentTime = DateTime.Now;
-                if (wheelDistanceL != 0)
-                {
-                    measured_timestepL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
-                    previousTimeL = currentTime;
-            
-                }
-                if (wheelDistanceR != 0)
-                {
-                    measured_timestepR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
-                    previousTimeR = currentTime;
-                }
+                
 
                 // Update the global state of the robot - x,y,t (lab 2)
                 //LocalizeRealWithIMU();
@@ -371,31 +369,37 @@ namespace DrRobot.JaguarControl
             
 
             double Kp_PWM, Ki_PWM;
-            Kp_PWM = 6; //  2.25 * 16;
-            Ki_PWM = 3; // 10 * 2;
-            Console.WriteLine(wheelDistanceL);
-            
-            if (wheelDistanceL != 0)
+            Kp_PWM = 12; // 8; //  2.25 * 16;
+            Ki_PWM = 2; // 10 * 2;
+
+            DateTime currentTime = DateTime.Now;
+            double MTSL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
+            if (wheelDistanceL != 0 || MTSL > 0.5)
             {
+                measured_timestepL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
+                previousTimeL = currentTime;
                 rotRateLest = (wheelDistanceL / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepL;
             }
-            if (wheelDistanceR != 0)
+            double MTSR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
+            if (wheelDistanceR != 0 || MTSR > 0.5)
             {
+                measured_timestepR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
+                previousTimeR = currentTime;
                 rotRateRest = (wheelDistanceR / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepR;
             }
             double errorL = desiredRotRateL - rotRateLest;
-            errorLInt += wheelDistanceL != 0 ? errorL * measured_timestepL : 0;
+            errorLInt += ( wheelDistanceL != 0 || MTSL > 0.5 ) ? errorL * measured_timestepL : 0;
             signalL = Kp_PWM * errorL + Ki_PWM * errorLInt;
 
             double errorR = desiredRotRateR - rotRateRest;
-            errorRInt += wheelDistanceR != 0 ? errorR * measured_timestepR : 0;
+            errorRInt += ( wheelDistanceR != 0 || MTSR > 0.5 ) ? errorR * measured_timestepR : 0;
             signalR = Kp_PWM * errorR + Ki_PWM * errorRInt;
         
 
             // The following settings are used to help develop the controller in simulation.
             // They will be replaced when the actual jaguar is used.
-            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 / (1.8519/1.8519) + signalL);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 / (1.6317/1.8519) - signalR);//(zeroOutput - u_R);
+            motorSignalL = (short)((zeroOutput + desiredRotRateL * 100 + signalL) / (1.8519 / 1.8519));// (zeroOutput + u_L);
+            motorSignalR = (short)((zeroOutput - desiredRotRateR * 100 - signalR) / (1.6317 / 1.8519));//(zeroOutput - u_R);
 
            // motorSignalL = (short) -desiredRotRateL;
             //motorSignalR = desiredRotRateR;
@@ -634,7 +638,7 @@ namespace DrRobot.JaguarControl
             // Calculate state
             double pho = Math.Sqrt(Math.Pow(delta_x, 2)+ Math.Pow(delta_y,2));
             double alpha = -t + Math.Atan2(delta_y, delta_x); //check to be within -pi and pi
-            double beta = -t - alpha - desiredT; //check to be within -pi and pi
+            double beta = -t - alpha + desiredT; //check to be within -pi and pi
 
             // Threshold errors
 
@@ -648,7 +652,6 @@ namespace DrRobot.JaguarControl
 
             // Check to see if point is behind robot
             bool behindRobot = (Math.Abs(alpha) > Math.PI/2) ? true : false;
-            Console.WriteLine(behindRobot);
 
             // adjust alpha if point is behind robot
             alpha = (behindRobot) ? -t + Math.Atan2(-delta_y, -delta_x) : alpha;
@@ -659,14 +662,22 @@ namespace DrRobot.JaguarControl
             double desiredW = Kalpha * alpha + Kbeta * beta;
 
             // use different controller if within threshold
-            if (Math.Abs(delta_x) < phoTrackingAccuracy && Math.Abs(delta_y) < phoTrackingAccuracy)
+            if (Math.Sqrt(Math.Pow(delta_x,2) + Math.Pow(delta_y,2)) < phoTrackingAccuracy)
             {
-                beta = -t - desiredT;
+                within_tracking = true;
+
+            }
+            if (within_tracking && desiredX == desiredX_prev && desiredY == desiredY_prev && desiredT == desiredT_prev)
+            {
+                beta = -t + desiredT;
                 beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
-                double KbetaNew = -2*Kbeta;
+                double KbetaNew = -6 * Kbeta;
                 desiredW = KbetaNew * beta;
                 desiredV = 0;
-
+            }
+            else
+            {
+                within_tracking = false;
             }
                 
 
@@ -718,6 +729,9 @@ namespace DrRobot.JaguarControl
             // desiredRotRateL = (short) (-pulsesPerRotation*2);
             // desiredRotRateR = (short) (-pulsesPerRotation*2);
 
+            desiredX_prev = desiredX;
+            desiredY_prev = desiredY;
+            desiredT_prev = desiredT;
 
 
 
@@ -727,63 +741,64 @@ namespace DrRobot.JaguarControl
 
 
         // // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
-        // private void TrackTrajectory()
-        // {
-        //     // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
-        //     // It will do so by altering the value of desired_x, desired_y, desired_t
-        //     double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
-        //     double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
-        //     int max_i = trajectory_x.Length;
+        private void TrackTrajectory()
+        {
+            // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
+            // It will do so by altering the value of desired_x, desired_y, desired_t
+            double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
+            double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
+            int max_i = trajectory_x.Length;
             
-        //     // increment i if within range of 
-        //     double x1 = trajectory_x[traj_i];
-        //     double y1 = trajectory_y[traj_i];
-        //     if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
-        //     {
-        //         if(traj_i < max_i - 1) traj_i++;
-        //         x1 = trajectory_x[traj_i];
-        //         y1 = trajectory_y[traj_i];
-        //     }
-        //     // if at least two more points to hit
-        //     if (traj_i < max_i - 1)
-        //     {
-        //         double x2 = trajectory_x[traj_i + 1];
-        //         double y2 = trajectory_y[traj_i + 1];
+            // increment i if within range of 
+            double x1 = trajectory_x[traj_i];
+            double y1 = trajectory_y[traj_i];
+            if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
+            {
+                if(traj_i < max_i - 1) traj_i++;
+                x1 = trajectory_x[traj_i];
+                y1 = trajectory_y[traj_i];
+            }
+            // if at least two more points to hit
+            if (traj_i < max_i - 1)
+            {
+                double x2 = trajectory_x[traj_i + 1];
+                double y2 = trajectory_y[traj_i + 1];
 
-        //         // TODO Vai's code to set desiredX, desiredY, desiredT
-        //         //This function creates a smooth circular trajectory between 3 points
-        //         // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
-        //         double ma = (y1-y)/(x1-x);
-        //         double mb = (y2-y1)/(x2-x1);
+                // TODO Vai's code to set desiredX, desiredY, desiredT
+                //This function creates a smooth circular trajectory between 3 points
+                // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
+                double ma = (y1-y)/(x1-x);
+                double mb = (y2-y1)/(x2-x1);
 
-        //         //compute center of circle
-        //         double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
-        //         double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
+                //compute center of circle
+                double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
+                double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
 
-        //         //compute radius of circle
-        //         double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
+                //compute radius of circle
+                double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
 
-        //         // Compute dT
-        //         double currT = Math.Atan2(y - yc, x - xc);
-        //         double currT1 = Math.Atan2(y1 - yc, x1 - xc);
-        //         double dT = Math.Sign(currT1-currT)*0.3/r;
+                // Compute dT
+                double currT = Math.Atan2(y - yc, x - xc);
+                double currT1 = Math.Atan2(y1 - yc, x1 - xc);
+                double dT = Math.Sign(currT1-currT)*0.3/r;
 
-        //         //determine new desired state
-        //         desiredX = r * Math.Cos(currT + dT) + xc;
-        //         desiredY = r * Math.Sin(currT + dT) + yc;
-        //         desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
-        //     }
-        //     else // just try to go to the last point
-        //     {
-        //         desiredX = x1;
-        //         desiredY = y1;
-        //         desiredT = 0;
-        //     }
+                //determine new desired state
+                desiredX = r * Math.Cos(currT + dT) + xc;
+                desiredY = r * Math.Sin(currT + dT) + yc;
+                desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
+            }
+            else // just try to go to the last point
+            {
+                desiredX = x1;
+                desiredY = y1;
+                desiredT = 0;
+            }
 
-        // }
+        }
 
 
                 // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
+        /*
         private void TrackTrajectory()
         {
             // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
@@ -795,11 +810,11 @@ namespace DrRobot.JaguarControl
             // increment i if within range of 
             double x2 = trajectory_x[traj_i];
             double y2 = trajectory_y[traj_i];
-            if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
+            if(Math.Sqrt( Math.Pow(x-x2,2) + Math.Pow(y-y2,2) ) < phoTrackingAccuracy)
             {
                 if(traj_i < max_i - 1) traj_i++;
-                x1 = trajectory_x[traj_i];
-                y1 = trajectory_y[traj_i];
+                x2 = trajectory_x[traj_i];
+                y2 = trajectory_y[traj_i];
             }
 
             double x1 = trajectory_x[traj_i - 1];
@@ -828,6 +843,7 @@ namespace DrRobot.JaguarControl
             desiredY = y_close+dy;
             desiredT = Math.Atan2(dy, dx);
         }
+         * */
 
 
 
@@ -905,17 +921,13 @@ namespace DrRobot.JaguarControl
             // Make sure t stays between pi and -pi
 
             // Update the actual
-            x = x + distanceTravelled * Math.Cos(t + angleTravelled);
-            y = y + distanceTravelled * Math.Sin(t + angleTravelled);
+            x = x + distanceTravelled * Math.Cos(t + angleTravelled/2);
+            y = y + distanceTravelled * Math.Sin(t + angleTravelled/2);
             t = t + angleTravelled;
             if (t > Math.PI)
                 t = t - 2 * Math.PI;
             else if (t < -Math.PI)
                 t = t + 2 * Math.PI;
-
-            Console.WriteLine(x);
-            Console.WriteLine(y);
-            Console.WriteLine(t);
 
 
             // ****************** Additional Student Code: End   ************
