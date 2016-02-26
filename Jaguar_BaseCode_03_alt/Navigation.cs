@@ -63,8 +63,10 @@ namespace DrRobot.JaguarControl
         const double phoTrackingAccuracy = 0.10;
         double time = 0;
         DateTime startTime;
-        DateTime previousTime;
-        double measured_timestep;
+        DateTime previousTimeL;
+        double measured_timestepL;
+        DateTime previousTimeR;
+        double measured_timestepR;
 
         public short K_P = 15;//15;
         public short K_I = 0;//0;
@@ -79,6 +81,7 @@ namespace DrRobot.JaguarControl
         // PWM error globals
         double errorLInt = 0;
         double errorRInt = 0;
+        double signalL, signalR;
 
         double rotRateLest = 0;
         double rotRateRest = 0;
@@ -131,6 +134,8 @@ namespace DrRobot.JaguarControl
 
             rotRateLest = 0;
             rotRateRest = 0;
+            signalL = 0;
+            signalR = 0;
 
             // Zero actuator signals
             motorSignalL = 0;
@@ -149,7 +154,10 @@ namespace DrRobot.JaguarControl
             displayNodes = true;
             displaySimRobot = true;
 
-            previousTime = DateTime.Now;
+            previousTimeL = DateTime.Now;
+            previousTimeR = DateTime.Now;
+            measured_timestepL = 0;
+            measured_timestepR = 0;
 
             traj_i = 0;
         }
@@ -192,15 +200,24 @@ namespace DrRobot.JaguarControl
                 
                 // Update Sensor Readings
                 UpdateSensorMeasurements();
-                DateTime currentTime = DateTime.Now;
-                measured_timestep = (currentTime - previousTime).TotalMilliseconds / 1000;
-                previousTime = currentTime;
 
                 // Determine the change of robot position, orientation (lab 2)	
                 MotionPrediction();
 
                 // Update the global state of the robot - x,y,t (lab 2)
                 LocalizeRealWithOdometry();
+                DateTime currentTime = DateTime.Now;
+                if (wheelDistanceL != 0)
+                {
+                    measured_timestepL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
+                    previousTimeL = currentTime;
+            
+                }
+                if (wheelDistanceR != 0)
+                {
+                    measured_timestepR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
+                    previousTimeR = currentTime;
+                }
 
                 // Update the global state of the robot - x,y,t (lab 2)
                 //LocalizeRealWithIMU();
@@ -351,27 +368,52 @@ namespace DrRobot.JaguarControl
             // Students must set motorSignalL and motorSignalR. Make sure
             // they are set between 0 and maxPosOutput. A PID control is
             // suggested.
+            short satRotRateL = 0;
+            short satRotRateR = 0;
+
+            // min rot rate if trying to move
+            if (Math.Abs(desiredRotRateL) > 0)
+                satRotRateL = (short)(Math.Sign(desiredRotRateL) * Math.Max((double)Math.Abs(desiredRotRateL), 100));
+            if (Math.Abs(desiredRotRateR) > 0)
+                satRotRateR = (short)(Math.Sign(desiredRotRateR) * Math.Max((double)Math.Abs(desiredRotRateR), 100));
+
+            if (satRotRateL != 0 && satRotRateR != 0)
+            {
+                if (satRotRateL / desiredRotRateL > satRotRateR / desiredRotRateR)
+                    satRotRateR = (short)(desiredRotRateR * satRotRateL / desiredRotRateL);
+                else
+                    satRotRateL = (short)(desiredRotRateL * satRotRateR / desiredRotRateR);
+            }
+
+            desiredRotRateL = satRotRateL;
+            desiredRotRateR = satRotRateR;
 
             double Kp_PWM, Ki_PWM;
-            Kp_PWM = 0;
-            Ki_PWM = 0;
-
-            rotRateLest = (wheelDistanceL / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestep;
-            rotRateRest = (wheelDistanceR / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestep;
-
+            Kp_PWM = 2.25; //  2.25 * 16;
+            Ki_PWM = 0; // 10 * 2;
+            Console.WriteLine(wheelDistanceL);
+            
+            if (wheelDistanceL != 0)
+            {
+                rotRateLest = (wheelDistanceL / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepL;
+            }
+            if (wheelDistanceR != 0)
+            {
+                rotRateRest = (wheelDistanceR / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepR;
+            }
             double errorL = desiredRotRateL - rotRateLest;
+            errorLInt += wheelDistanceL != 0 ? errorL * measured_timestepL : 0;
+            signalL = Kp_PWM * errorL + Ki_PWM * errorLInt;
+
             double errorR = desiredRotRateR - rotRateRest;
-
-            errorLInt += errorL * measured_timestep;
-            errorRInt += errorR * measured_timestep;
-
-            double signalL = Kp_PWM * errorL + Ki_PWM * errorLInt;
-            double signalR = Kp_PWM * errorR + Ki_PWM * errorRInt;
+            errorRInt += wheelDistanceR != 0 ? errorR * measured_timestepR : 0;
+            signalR = Kp_PWM * errorR + Ki_PWM * errorRInt;
+        
 
             // The following settings are used to help develop the controller in simulation.
             // They will be replaced when the actual jaguar is used.
-            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 + signalL);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 - signalR);//(zeroOutput - u_R);
+            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 / 1.8519 + signalL);// (zeroOutput + u_L);
+            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 / 1.6317 - signalR);//(zeroOutput - u_R);
 
            // motorSignalL = (short) -desiredRotRateL;
             //motorSignalR = desiredRotRateR;
@@ -451,7 +493,7 @@ namespace DrRobot.JaguarControl
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
                 // String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString();
-                String newData = time.ToString() + " " + desiredRotRateL.ToString() + " " + wheelDistanceL.ToString() + " " + desiredRotRateR.ToString() + " " + wheelDistanceR.ToString();
+                String newData = time.ToString() + " " + desiredRotRateL.ToString() + " " + rotRateLest.ToString() + " " + desiredRotRateR.ToString() + " " + rotRateRest.ToString();
 
                 logFile.WriteLine(newData);
             }
@@ -668,8 +710,8 @@ namespace DrRobot.JaguarControl
             desiredRotRateL = (short)(satWheelVelL / wheelRadius * pulsesPerRotation / (2 * Math.PI));
             desiredRotRateR = (short)(satWheelVelR / wheelRadius * pulsesPerRotation / (2 * Math.PI));
             
-            //desiredRotRateL = (short)pulsesPerRotation;
-            //desiredRotRateR = (short)pulsesPerRotation;
+            // desiredRotRateL = (short) (-pulsesPerRotation*2);
+            // desiredRotRateR = (short) (-pulsesPerRotation*2);
 
 
 
