@@ -368,29 +368,11 @@ namespace DrRobot.JaguarControl
             // Students must set motorSignalL and motorSignalR. Make sure
             // they are set between 0 and maxPosOutput. A PID control is
             // suggested.
-            short satRotRateL = 0;
-            short satRotRateR = 0;
-
-            // min rot rate if trying to move
-            if (Math.Abs(desiredRotRateL) > 0)
-                satRotRateL = (short)(Math.Sign(desiredRotRateL) * Math.Max((double)Math.Abs(desiredRotRateL), 100));
-            if (Math.Abs(desiredRotRateR) > 0)
-                satRotRateR = (short)(Math.Sign(desiredRotRateR) * Math.Max((double)Math.Abs(desiredRotRateR), 100));
-
-            if (satRotRateL != 0 && satRotRateR != 0)
-            {
-                if (satRotRateL / desiredRotRateL > satRotRateR / desiredRotRateR)
-                    satRotRateR = (short)(desiredRotRateR * satRotRateL / desiredRotRateL);
-                else
-                    satRotRateL = (short)(desiredRotRateL * satRotRateR / desiredRotRateR);
-            }
-
-            desiredRotRateL = satRotRateL;
-            desiredRotRateR = satRotRateR;
+            
 
             double Kp_PWM, Ki_PWM;
-            Kp_PWM = 2.25; //  2.25 * 16;
-            Ki_PWM = 0; // 10 * 2;
+            Kp_PWM = 6; //  2.25 * 16;
+            Ki_PWM = 3; // 10 * 2;
             Console.WriteLine(wheelDistanceL);
             
             if (wheelDistanceL != 0)
@@ -412,8 +394,8 @@ namespace DrRobot.JaguarControl
 
             // The following settings are used to help develop the controller in simulation.
             // They will be replaced when the actual jaguar is used.
-            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 / 1.8519 + signalL);// (zeroOutput + u_L);
-            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 / 1.6317 - signalR);//(zeroOutput - u_R);
+            motorSignalL = (short)(zeroOutput + desiredRotRateL * 100 / (1.8519/1.8519) + signalL);// (zeroOutput + u_L);
+            motorSignalR = (short)(zeroOutput - desiredRotRateR * 100 / (1.6317/1.8519) - signalR);//(zeroOutput - u_R);
 
            // motorSignalL = (short) -desiredRotRateL;
             //motorSignalR = desiredRotRateR;
@@ -493,7 +475,8 @@ namespace DrRobot.JaguarControl
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
                 // String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString();
-                String newData = time.ToString() + " " + desiredRotRateL.ToString() + " " + rotRateLest.ToString() + " " + desiredRotRateR.ToString() + " " + rotRateRest.ToString();
+                String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString()
+                    + " " + desiredX.ToString() + " " + desiredY.ToString() + " " + desiredT.ToString();
 
                 logFile.WriteLine(newData);
             }
@@ -680,7 +663,7 @@ namespace DrRobot.JaguarControl
             {
                 beta = -t - desiredT;
                 beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
-                double KbetaNew = -Kbeta;
+                double KbetaNew = -2*Kbeta;
                 desiredW = KbetaNew * beta;
                 desiredV = 0;
 
@@ -701,8 +684,30 @@ namespace DrRobot.JaguarControl
             // desired wheel velocities
             double desiredWheelVelL = -(L * saturatedW - saturatedV);
             double desiredWheelVelR = (L * saturatedW + saturatedV);
-            double satWheelVelL = Math.Sign(desiredWheelVelL) * Math.Min(Math.Abs(desiredWheelVelL), 0.25);
-            double satWheelVelR = Math.Sign(desiredWheelVelR) * Math.Min(Math.Abs(desiredWheelVelR), 0.25);
+            //lower saturation
+            double satWheelVelL = 0;
+            double satWheelVelR = 0;
+
+            // min rot rate if trying to move
+            if (Math.Abs(desiredWheelVelL) > 0)
+                satWheelVelL = (Math.Sign(desiredWheelVelL) * Math.Max((double)Math.Abs(desiredWheelVelL), 0.05));
+            if (Math.Abs(desiredWheelVelR) > 0)
+                satWheelVelR = (Math.Sign(desiredWheelVelR) * Math.Max((double)Math.Abs(desiredWheelVelR), 0.05));
+
+            if (satWheelVelL != 0 && satWheelVelR != 0)
+            {
+                if (satWheelVelL / desiredRotRateL > satWheelVelR / desiredRotRateR)
+                    satWheelVelR = (desiredWheelVelR * satWheelVelL / desiredWheelVelL);
+                else
+                    satWheelVelL = (desiredWheelVelL * satWheelVelR / desiredWheelVelR);
+            }
+
+            desiredWheelVelL = satWheelVelL;
+            desiredWheelVelR = satWheelVelR;
+
+            // upper saturation
+            satWheelVelL = Math.Sign(desiredWheelVelL) * Math.Min(Math.Abs(desiredWheelVelL), 0.25);
+            satWheelVelR = Math.Sign(desiredWheelVelR) * Math.Min(Math.Abs(desiredWheelVelR), 0.25);
             if (Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL) < Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR))
                 satWheelVelR = desiredWheelVelR * Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL);
             else
