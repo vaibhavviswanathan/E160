@@ -726,7 +726,64 @@ namespace DrRobot.JaguarControl
 
 
 
-        // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
+        // // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
+        // private void TrackTrajectory()
+        // {
+        //     // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
+        //     // It will do so by altering the value of desired_x, desired_y, desired_t
+        //     double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
+        //     double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
+        //     int max_i = trajectory_x.Length;
+            
+        //     // increment i if within range of 
+        //     double x1 = trajectory_x[traj_i];
+        //     double y1 = trajectory_y[traj_i];
+        //     if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
+        //     {
+        //         if(traj_i < max_i - 1) traj_i++;
+        //         x1 = trajectory_x[traj_i];
+        //         y1 = trajectory_y[traj_i];
+        //     }
+        //     // if at least two more points to hit
+        //     if (traj_i < max_i - 1)
+        //     {
+        //         double x2 = trajectory_x[traj_i + 1];
+        //         double y2 = trajectory_y[traj_i + 1];
+
+        //         // TODO Vai's code to set desiredX, desiredY, desiredT
+        //         //This function creates a smooth circular trajectory between 3 points
+        //         // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
+        //         double ma = (y1-y)/(x1-x);
+        //         double mb = (y2-y1)/(x2-x1);
+
+        //         //compute center of circle
+        //         double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
+        //         double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
+
+        //         //compute radius of circle
+        //         double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
+
+        //         // Compute dT
+        //         double currT = Math.Atan2(y - yc, x - xc);
+        //         double currT1 = Math.Atan2(y1 - yc, x1 - xc);
+        //         double dT = Math.Sign(currT1-currT)*0.3/r;
+
+        //         //determine new desired state
+        //         desiredX = r * Math.Cos(currT + dT) + xc;
+        //         desiredY = r * Math.Sin(currT + dT) + yc;
+        //         desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
+        //     }
+        //     else // just try to go to the last point
+        //     {
+        //         desiredX = x1;
+        //         desiredY = y1;
+        //         desiredT = 0;
+        //     }
+
+        // }
+
+
+                // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
         private void TrackTrajectory()
         {
             // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
@@ -736,55 +793,43 @@ namespace DrRobot.JaguarControl
             int max_i = trajectory_x.Length;
             
             // increment i if within range of 
-            double x1 = trajectory_x[traj_i];
-            double y1 = trajectory_y[traj_i];
+            double x2 = trajectory_x[traj_i];
+            double y2 = trajectory_y[traj_i];
             if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
             {
                 if(traj_i < max_i - 1) traj_i++;
                 x1 = trajectory_x[traj_i];
                 y1 = trajectory_y[traj_i];
             }
-            // if at least two more points to hit
-            if (traj_i < max_i - 1)
-            {
-                double x2 = trajectory_x[traj_i + 1];
-                double y2 = trajectory_y[traj_i + 1];
 
-                // TODO Vai's code to set desiredX, desiredY, desiredT
-                //This function creates a smooth circular trajectory between 3 points
-                // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
-                double ma = (y1-y)/(x1-x);
-                double mb = (y2-y1)/(x2-x1);
+            double x1 = trajectory_x[traj_i - 1];
+            double y1 = trajectory_y[traj_i - 1];
 
-                //compute center of circle
-                double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
-                double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
+           
+            //This function creates a linear trajectory between 2 points
+            // Compute the slopes and intercept
+            double m = (y2-y1)/(x2-x1);
+            double b = y2-m*x2;
 
-                //compute radius of circle
-                double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
+            // Calculate closest point to robot
+            double m_r = -1/m;
+            double b_r = y-m*x;
 
-                // Compute dT
-                double currT = Math.Atan2(y - yc, x - xc);
-                double currT1 = Math.Atan2(y1 - yc, x1 - xc);
-                double dT = Math.Sign(currT1-currT)*0.3/r;
+          	double x_close = (b_r-b)/(m_r-m);
+          	double y_close = m_r*x_close+b_r;
 
-                //determine new desired state
-                desiredX = r * Math.Cos(currT + dT) + xc;
-                desiredY = r * Math.Sin(currT + dT) + yc;
-                desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
-            }
-            else // just try to go to the last point
-            {
-                desiredX = x1;
-                desiredY = y1;
-                desiredT = 0;
-            }
+            
+            // 	TODO Compute dT
+            double dx = Math.Sqrt(1/(1+Math.Pow(m, 2)));
+            double dy = m*dx;
 
-
-
-
-
+            //TODO determine new desired state
+            desiredX = x_close+dx;
+            desiredY = y_close+dy;
+            desiredT = Math.Atan2(dy, dx);
         }
+
+
 
         // THis function is called to construct a collision-free trajectory for the robot to follow
         private void PRMMotionPlanner()
