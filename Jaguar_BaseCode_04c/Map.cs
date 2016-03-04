@@ -103,13 +103,28 @@ namespace DrRobot.JaguarControl
         // the range measurement to a segment given the ROBOT POSITION (x, y) and 
         // SENSOR ORIENTATION (t)
         double GetWallDistance(double x, double y, double t, int segment){
+        	m_wall = slopes(segment);
+        	b_wall = intercepts(segment);
+        	size = segmentSizes(segment);
 
+        	m_bot = Math.Tan(t);
+        	b_bot = y - m_bot*x;
+
+        	x_c = (b_bot-b_wall)/(m_wall - m_bot)
+        	y_c = m_wall*x_c+b_wall;
+
+        	x_low = mapSegmentCorners(segment, 0, 0);
+        	x_high = mapSegmentCorners(segment, 1, 0);
+
+        	bool validSeg = (x_c > x_low)&&(x_c < x_high);
+
+        	wallDist = validSeg ? Math.Sqrt(Math.Pow((x_c-x),2) + Math.Pow((y_c-y),2)) : Math.Inf;
 
 
 
 	        // ****************** Additional Student Code: End   ************
 
-	        return 0;
+	        return wallDist;
         }
 
 
