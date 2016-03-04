@@ -56,6 +56,9 @@ namespace DrRobot.JaguarControl
         double time = 0;
         DateTime startTime;
 
+        double std_l = 0;
+        double std_r = 0;
+
         public short K_P = 15;//15;
         public short K_I = 0;//0;
         public short K_D = 3;//3;
@@ -403,16 +406,64 @@ namespace DrRobot.JaguarControl
         }
         public void CalcMotorSignals()
         {
-            short zeroOutput = 16383;
-            short maxPosOutput = 32767;
+            // ****************** Additional Student Code: Start ************
 
+            // Students must set motorSignalL and motorSignalR. Make sure
+            // they are set between 0 and maxPosOutput. A PID control is
+            // suggested.
+            
 
+            double Kp_PWM, Ki_PWM, Kd_PWM;
+            Kp_PWM = 12; // 8; //  2.25 * 16;
+            Ki_PWM = 2; // 10 * 2;
+            Kd_PWM = 0.1;
+            double N = 30; // filter coefficient
 
-            motorSignalL = (short)(zeroOutput);
-            motorSignalR = (short)(zeroOutput);
+            DateTime currentTime = DateTime.Now;
+            double MTSL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
+            if (wheelDistanceL != 0 || MTSL > 0.5)
+            {
+                measured_timestepL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
+                previousTimeL = currentTime;
+                rotRateLest = (wheelDistanceL / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepL;
+            }
+            double MTSR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
+            if (wheelDistanceR != 0 || MTSR > 0.5)
+            {
+                measured_timestepR = (currentTime - previousTimeR).TotalMilliseconds / 1000;
+                previousTimeR = currentTime;
+                rotRateRest = (wheelDistanceR / (2 * Math.PI * wheelRadius)) * pulsesPerRotation / measured_timestepR;
+            }
+            double errorL = desiredRotRateL - rotRateLest;
+            errorLInt += ( wheelDistanceL != 0 || MTSL > 0.5 ) ? errorL * measured_timestepL : 0;
+            double DerrorL = (wheelDistanceL != 0 || MTSL > 0.5) ? N * (errorL - wprevL) : 0;
+            wprevL += (wheelDistanceL != 0 || MTSL > 0.5) ? DerrorL * measured_timestepL : 0;
+            signalL = Kp_PWM * errorL + Ki_PWM * errorLInt + Kd_PWM * DerrorL;
+
+            double errorR = desiredRotRateR - rotRateRest;
+            errorRInt += ( wheelDistanceR != 0 || MTSR > 0.5 ) ? errorR * measured_timestepR : 0;
+            double DerrorR = (wheelDistanceR != 0 || MTSR > 0.5) ? N * (errorR - wprevR) : 0;
+            wprevR += (wheelDistanceR != 0 || MTSR > 0.5) ? DerrorR * measured_timestepR : 0;
+            signalR = Kp_PWM * errorR + Ki_PWM * errorRInt + Kd_PWM * DerrorR;
+        
+
+            // The following settings are used to help develop the controller in simulation.
+            // They will be replaced when the actual jaguar is used.
+            motorSignalL = (short)((zeroOutput + desiredRotRateL * 100 + signalL) / (1.8519 / 1.8519));// (zeroOutput + u_L);
+            motorSignalR = (short)((zeroOutput - desiredRotRateR * 100 - signalR) / (1.6317 / 1.8519));//(zeroOutput - u_R);
+
+           // motorSignalL = (short) -desiredRotRateL;
+            //motorSignalR = desiredRotRateR;
 
             motorSignalL = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalL));
             motorSignalR = (short)Math.Min(maxPosOutput, Math.Max(0, (int)motorSignalR));
+
+            double satsignalL = motorSignalL - zeroOutput;
+            double satsignalR = motorSignalR - zeroOutput;
+
+            // errorLInt += measured_timestep / Ki_PWM * (satsignalL - motorSignalR);
+
+            // ****************** Additional Student Code: End   ************
 
         }
 
@@ -511,16 +562,114 @@ namespace DrRobot.JaguarControl
         private void FlyToSetPoint()
         {
 
-            // ****************** Additional Student Code: Start ************
+              // ****************** Additional Student Code: Start ************
 
-            // Put code here to calculate desiredRotRateR and 
-            // desoredRotRateL. Make sure the robot does not exceed 
-            // maxVelocity!!!!!!!!!!!!
+            // Calculate delta X and delta Y
+            double delta_x = desiredX - x;
+            double delta_y = desiredY - y;
 
-                desiredRotRateR = 0;
-                desiredRotRateL = 0;
+            // Calculate state
+            double pho = Math.Sqrt(Math.Pow(delta_x, 2)+ Math.Pow(delta_y,2));
+            double alpha = -t + Math.Atan2(delta_y, delta_x); //check to be within -pi and pi
+            double beta = -t - alpha + desiredT; //check to be within -pi and pi
+
+            // Threshold errors
+
+            pho = (Math.Abs(pho) < phoTrackingAccuracy) ? 0 : pho;
+            alpha = (Math.Abs(alpha) < alphaTrackingAccuracy) ? 0 : alpha;
+            beta = (Math.Abs(beta) < betaTrackingAccuracy) ? 0 : beta;
+
+            // Make sure within -pi and pi
+            alpha = (alpha < -Math.PI) ? alpha + 2 * Math.PI : ((alpha > Math.PI) ? alpha - 2 * Math.PI : alpha);
+            beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
+
+            // Check to see if point is behind robot
+            bool behindRobot = (Math.Abs(alpha) > Math.PI/2) ? true : false;
+
+            // adjust alpha if point is behind robot
+            alpha = (behindRobot) ? -t + Math.Atan2(-delta_y, -delta_x) : alpha;
+            alpha = (alpha < -Math.PI) ? alpha + 2 * Math.PI : ((alpha > Math.PI) ? alpha - 2 * Math.PI : alpha);
+
+            // calculate desired velocity 
+            double desiredV = (behindRobot) ? -Kpho * pho : Kpho * pho;
+            double desiredW = Kalpha * alpha + Kbeta * beta;
+
+            // use different controller if within threshold
+            if (Math.Sqrt(Math.Pow(delta_x,2) + Math.Pow(delta_y,2)) < phoTrackingAccuracy)
+            {
+                within_tracking = true;
+
+            }
+            if (within_tracking && desiredX == desiredX_prev && desiredY == desiredY_prev && desiredT == desiredT_prev)
+            {
+                beta = -t + desiredT;
+                beta = (beta < -Math.PI) ? beta + 2 * Math.PI : ((beta > Math.PI) ? beta - 2 * Math.PI : beta);
+                double KbetaNew = -6 * Kbeta;
+                desiredW = KbetaNew * beta;
+                desiredV = 0;
+            }
+            else
+            {
+                within_tracking = false;
+            }
+                
+
+            // saturate desired velocity
+            // double saturatedV1 = Math.Sign(desiredV) * Math.Min(Math.Abs(desiredV), 0.25);
+            // double saturatedW1 = saturatedV1 > 0 ? desiredW * (saturatedV1 / desiredV) : desiredW;
+
+            double L = 2*robotRadius;
+            // double saturatedW = Math.Sign(saturatedW1) * Math.Min(Math.Abs(saturatedW1) * L, 0.25);
+            // double saturatedV = saturatedW > 0 ? saturatedV1 * (saturatedW / saturatedW1) : saturatedV1;
+            double saturatedV = desiredV;
+            double saturatedW = desiredW;
+
+
+            // desired wheel velocities
+            double desiredWheelVelL = -(L * saturatedW - saturatedV);
+            double desiredWheelVelR = (L * saturatedW + saturatedV);
+            //lower saturation
+            double satWheelVelL = 0;
+            double satWheelVelR = 0;
+
+            // min rot rate if trying to move
+            if (Math.Abs(desiredWheelVelL) > 0)
+                satWheelVelL = (Math.Sign(desiredWheelVelL) * Math.Max((double)Math.Abs(desiredWheelVelL), 0.05));
+            if (Math.Abs(desiredWheelVelR) > 0)
+                satWheelVelR = (Math.Sign(desiredWheelVelR) * Math.Max((double)Math.Abs(desiredWheelVelR), 0.05));
+
+            if (satWheelVelL != 0 && satWheelVelR != 0)
+            {
+                if (satWheelVelL / desiredRotRateL > satWheelVelR / desiredRotRateR)
+                    satWheelVelR = (desiredWheelVelR * satWheelVelL / desiredWheelVelL);
+                else
+                    satWheelVelL = (desiredWheelVelL * satWheelVelR / desiredWheelVelR);
+            }
+
+            desiredWheelVelL = satWheelVelL;
+            desiredWheelVelR = satWheelVelR;
+
+            // upper saturation
+            satWheelVelL = Math.Sign(desiredWheelVelL) * Math.Min(Math.Abs(desiredWheelVelL), 0.25);
+            satWheelVelR = Math.Sign(desiredWheelVelR) * Math.Min(Math.Abs(desiredWheelVelR), 0.25);
+            if (Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL) < Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR))
+                satWheelVelR = desiredWheelVelR * Math.Abs(satWheelVelL) / Math.Abs(desiredWheelVelL);
+            else
+                satWheelVelL = desiredWheelVelL * Math.Abs(satWheelVelR) / Math.Abs(desiredWheelVelR);
+            desiredRotRateL = (short)(satWheelVelL / wheelRadius * pulsesPerRotation / (2 * Math.PI));
+            desiredRotRateR = (short)(satWheelVelR / wheelRadius * pulsesPerRotation / (2 * Math.PI));
+            
+            // desiredRotRateL = (short) (-pulsesPerRotation*2);
+            // desiredRotRateR = (short) (-pulsesPerRotation*2);
+
+            desiredX_prev = desiredX;
+            desiredY_prev = desiredY;
+            desiredT_prev = desiredT;
+
+
 
             // ****************** Additional Student Code: End   ************
+
         }
 
 
@@ -528,7 +677,101 @@ namespace DrRobot.JaguarControl
         // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
         private void TrackTrajectory()
         {
+                // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
+            // It will do so by altering the value of desired_x, desired_y, desired_t
+            double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
+            double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
+            int max_i = trajectory_x.Length;
+            
+            // increment i if within range of 
+            double x1 = trajectory_x[traj_i];
+            double y1 = trajectory_y[traj_i];
+            if(Math.Sqrt( Math.Pow(x-x1,2) + Math.Pow(y-y1,2) ) < phoTrackingAccuracy)
+            {
+                if(traj_i < max_i - 1) traj_i++;
+                x1 = trajectory_x[traj_i];
+                y1 = trajectory_y[traj_i];
+            }
+            // if at least two more points to hit
+            if (traj_i < max_i - 1)
+            {
+                double x2 = trajectory_x[traj_i + 1];
+                double y2 = trajectory_y[traj_i + 1];
 
+                // TODO Vai's code to set desiredX, desiredY, desiredT
+                //This function creates a smooth circular trajectory between 3 points
+                // Compute the slopes of line A (p1 - p2) and line B (p2 - p3)
+                double ma = (y1-y)/(x1-x);
+                double mb = (y2-y1)/(x2-x1);
+
+                //compute center of circle
+                double xc = (ma*mb*(y-y2)+mb*(x+x1)-ma*(x1+x2))/(2*(mb-ma));
+                double yc = -1/ma * (xc-(x+x1)/2)+(y+y1)/2; 
+
+                //compute radius of circle
+                double r = Math.Sqrt(Math.Pow(xc-x,2)+Math.Pow(yc-y,2));
+
+                // Compute dT
+                double currT = Math.Atan2(y - yc, x - xc);
+                double currT1 = Math.Atan2(y1 - yc, x1 - xc);
+                double dT = Math.Sign(currT1-currT)*0.3/r;
+
+                //determine new desired state
+                desiredX = r * Math.Cos(currT + dT) + xc;
+                desiredY = r * Math.Sin(currT + dT) + yc;
+                desiredT = Math.Atan2(desiredY-yc, desiredX-xc);
+            }
+            else // just try to go to the last point
+            {
+                desiredX = x1;
+                desiredY = y1;
+                desiredT = 0;
+            }
+
+        }
+
+
+                // THis function is called to follow a trajectory constructed by PRMMotionPlanner()
+        /*
+        private void TrackTrajectory()
+        {
+            // The purpose of this function is to track a trajectory determined by the trajectory_x, trajectory_y array
+            // It will do so by altering the value of desired_x, desired_y, desired_t
+            double[] trajectory_x = new double[] { 1, 3, 5, 3, 1 };
+            double[] trajectory_y = new double[] { 1, 2, 3, 4, 5 };
+            int max_i = trajectory_x.Length;
+            
+            // increment i if within range of 
+            double x2 = trajectory_x[traj_i];
+            double y2 = trajectory_y[traj_i];
+            if(Math.Sqrt( Math.Pow(x-x2,2) + Math.Pow(y-y2,2) ) < phoTrackingAccuracy)
+            {
+                if(traj_i < max_i - 1) traj_i++;
+                x2 = trajectory_x[traj_i];
+                y2 = trajectory_y[traj_i];
+            }
+            double x1 = trajectory_x[traj_i - 1];
+            double y1 = trajectory_y[traj_i - 1];
+           
+            //This function creates a linear trajectory between 2 points
+            // Compute the slopes and intercept
+            double m = (y2-y1)/(x2-x1);
+            double b = y2-m*x2;
+            // Calculate closest point to robot
+            double m_r = -1/m;
+            double b_r = y-m*x;
+            double x_close = (b_r-b)/(m_r-m);
+            double y_close = m_r*x_close+b_r;
+            
+            //  TODO Compute dT
+            double dx = Math.Sqrt(1/(1+Math.Pow(m, 2)));
+            double dy = m*dx;
+            //TODO determine new desired state
+            desiredX = x_close+dx;
+            desiredY = y_close+dy;
+            desiredT = Math.Atan2(dy, dx);
+        }
+         * */
         }
 
         // THis function is called to construct a collision-free trajectory for the robot to follow
@@ -557,10 +800,38 @@ namespace DrRobot.JaguarControl
             // Put code here to calculated distanceTravelled and angleTravelled.
             // You can set and use variables like diffEncoder1, currentEncoderPulse1,
             // wheelDistanceL, wheelRadius, encoderResolution etc. These are defined
-            // in the Robot.h file.
+            // above.
+
+            // compute diffEncoderPulses
+            double diffEncoderPulseR = currentEncoderPulseR - lastEncoderPulseR;
+            double diffEncoderPulseL = currentEncoderPulseL - lastEncoderPulseL;
+
+            // set previous encoder values
+            lastEncoderPulseR = currentEncoderPulseR;
+            lastEncoderPulseL = currentEncoderPulseL;
+
+            // correct for rollover
+            diffEncoderPulseL = diffEncoderPulseL < -encoderMax / 2 ?
+                diffEncoderPulseL + encoderMax : diffEncoderPulseL;
+            diffEncoderPulseR = diffEncoderPulseR < -encoderMax / 2 ?
+                diffEncoderPulseR + encoderMax : diffEncoderPulseR;
+            diffEncoderPulseL = diffEncoderPulseL > encoderMax / 2 ?
+                diffEncoderPulseL - encoderMax : diffEncoderPulseL;
+            diffEncoderPulseR = diffEncoderPulseR > encoderMax / 2 ?
+                diffEncoderPulseR - encoderMax : diffEncoderPulseR;
+
+            // reverse direction for right side
+            diffEncoderPulseR = -diffEncoderPulseR;
+
+            // compute distance travelled in timestep
+            wheelDistanceR = (diffEncoderPulseR * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
+            wheelDistanceL = (diffEncoderPulseL * 2 * Math.PI * wheelRadius) / pulsesPerRotation; //check wheel r
+
+            // compute angle and distance travelled
+            distanceTravelled = (wheelDistanceR + wheelDistanceL) / 2;
+            angleTravelled = (wheelDistanceR - wheelDistanceL) / (2 * robotRadius); //check robot radius
 
 
-            
 
             // ****************** Additional Student Code: End   ************
         }
@@ -575,6 +846,15 @@ namespace DrRobot.JaguarControl
             // Put code here to calculate x,y,t based on odemetry 
             // (i.e. using last x, y, t as well as angleTravelled and distanceTravelled).
             // Make sure t stays between pi and -pi
+
+            // Update the actual
+            x = x + distanceTravelled * Math.Cos(t + angleTravelled/2);
+            y = y + distanceTravelled * Math.Sin(t + angleTravelled/2);
+            t = t + angleTravelled;
+            if (t > Math.PI)
+                t = t - 2 * Math.PI;
+            else if (t < -Math.PI)
+                t = t + 2 * Math.PI;
 
 
             // ****************** Additional Student Code: End   ************
@@ -604,6 +884,19 @@ namespace DrRobot.JaguarControl
             // ****************** Additional Student Code: Start ************
 
             // Put code here to calculate x_est, y_est, t_est using a PF
+
+            // CHECK: IS IT THE SAME RANDOMNESS FOR EACH POINT?
+
+            // propogate particles using odomotery
+            for (int i=0; i< numParticles; i++){
+                double rand_l = wheelDistanceL + std_l*RandomGaussian();
+                double rand_r = wheelDistanceR + std_r*RandomGaussian();
+
+
+                propagatedParticles[i].x = particles[i].x + distanceTravelled * Math.Cos(t + angleTravelled/2);
+                propagatedParticles[i].y = particles[i].t;
+                propagatedParticles[i].t = particles[i].t;
+            }
 
             x_est = 0; y_est = 0; t_est = 0;
 
