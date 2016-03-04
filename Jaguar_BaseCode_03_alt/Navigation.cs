@@ -82,6 +82,8 @@ namespace DrRobot.JaguarControl
         // PWM error globals
         double errorLInt = 0;
         double errorRInt = 0;
+        double wprevL = 0;
+        double wprevR = 0;
         double signalL, signalR;
 
         double rotRateLest = 0;
@@ -368,9 +370,11 @@ namespace DrRobot.JaguarControl
             // suggested.
             
 
-            double Kp_PWM, Ki_PWM;
+            double Kp_PWM, Ki_PWM, Kd_PWM;
             Kp_PWM = 12; // 8; //  2.25 * 16;
             Ki_PWM = 2; // 10 * 2;
+            Kd_PWM = 0.1;
+            double N = 30; // filter coefficient
 
             DateTime currentTime = DateTime.Now;
             double MTSL = (currentTime - previousTimeL).TotalMilliseconds / 1000;
@@ -389,11 +393,15 @@ namespace DrRobot.JaguarControl
             }
             double errorL = desiredRotRateL - rotRateLest;
             errorLInt += ( wheelDistanceL != 0 || MTSL > 0.5 ) ? errorL * measured_timestepL : 0;
-            signalL = Kp_PWM * errorL + Ki_PWM * errorLInt;
+            double DerrorL = (wheelDistanceL != 0 || MTSL > 0.5) ? N * (errorL - wprevL) : 0;
+            wprevL += (wheelDistanceL != 0 || MTSL > 0.5) ? DerrorL * measured_timestepL : 0;
+            signalL = Kp_PWM * errorL + Ki_PWM * errorLInt + Kd_PWM * DerrorL;
 
             double errorR = desiredRotRateR - rotRateRest;
             errorRInt += ( wheelDistanceR != 0 || MTSR > 0.5 ) ? errorR * measured_timestepR : 0;
-            signalR = Kp_PWM * errorR + Ki_PWM * errorRInt;
+            double DerrorR = (wheelDistanceR != 0 || MTSR > 0.5) ? N * (errorR - wprevR) : 0;
+            wprevR += (wheelDistanceR != 0 || MTSR > 0.5) ? DerrorR * measured_timestepR : 0;
+            signalR = Kp_PWM * errorR + Ki_PWM * errorRInt + Kd_PWM * DerrorR;
         
 
             // The following settings are used to help develop the controller in simulation.
