@@ -933,6 +933,21 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
+            double sigma = 0.3; // m (assumed)
+
+            // take 8 arcs of the laser pi/4 apart
+            int numArcs = 8;
+            for (int i = 0; i < numArcs; i++)
+            {
+                int laseriter =  (int)Math.Round(((double)i / numArcs)* (LaserData.Length));
+                double laserangle = laserAngles[laseriter];
+                double sensor_measurement = LaserData[laseriter];
+                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, laserangle + propagatedParticles[p].t);
+                
+                double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma,2) ));
+                weight += prob;
+            }
+
         }
 
 
@@ -941,7 +956,8 @@ namespace DrRobot.JaguarControl
         // for particle filtering. It should pick a random location in the 
         // environment for each particle by calling SetRandomPos
 
-        void InitializeParticles() {
+        void InitializeParticles()
+        {
 
 
 	        // Set particles in random locations and orientations within environment
