@@ -892,10 +892,23 @@ namespace DrRobot.JaguarControl
                 double rand_l = wheelDistanceL + std_l*RandomGaussian();
                 double rand_r = wheelDistanceR + std_r*RandomGaussian();
 
+                // compute angle and distance travelled
+                randDistance = (rand_r + rand_l) / 2;
+                randAngle = (rand_r - rand_l) / (2 * robotRadius); 
 
-                propagatedParticles[i].x = particles[i].x + distanceTravelled * Math.Cos(t + angleTravelled/2);
-                propagatedParticles[i].y = particles[i].t;
-                propagatedParticles[i].t = particles[i].t;
+                // add this to a particle                
+                propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(t + randAngle/2);
+                propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(t + randAngle/2);
+                propagatedParticles[i].t = particles[i].t + randAngle;
+
+                // ensures that angle stays with -pi and pi
+                if (propagatedParticles[i].t > Math.PI)
+                    propagatedParticles[i].t = propagatedParticles[i].t - 2 * Math.PI;
+                else if (propagatedParticles[i].t < -Math.PI)
+                    propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
+
+                propagatedParticles[i].w = CalculateWeight(i);
+
             }
 
             x_est = 0; y_est = 0; t_est = 0;
