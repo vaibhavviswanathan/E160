@@ -79,3 +79,11 @@ C:\Users\Root\Desktop\Jaguar\Chris_Jaguar\Jaguar_BaseCode_04b\obj\x86\Release\Ax
 C:\Users\Root\Desktop\Jaguar\Chris_Jaguar\Jaguar_BaseCode_04b\obj\x86\Release\JaguarControl.csproj.ResolveComReference.cache
 C:\Users\Root\Desktop\Jaguar\Chris_Jaguar\Jaguar_BaseCode_04b\obj\x86\Release\JaguarControl.exe
 C:\Users\Root\Desktop\Jaguar\Chris_Jaguar\Jaguar_BaseCode_04b\obj\x86\Release\JaguarControl.pdb
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\Interop.AXISMEDIACONTROLLib.dll
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\Interop.DRROBOTSentinelCONTROLLib.dll
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\Interop.EARTHLib.dll
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\AxInterop.AXISMEDIACONTROLLib.dll
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\AxInterop.DRROBOTSentinelCONTROLLib.dll
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\JaguarControl.csproj.ResolveComReference.cache
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\JaguarControl.exe
+\\Mac\Google Drive\2016 Spring\E160\E160\Jaguar_BaseCode_04c\obj\x86\Release\JaguarControl.pdb

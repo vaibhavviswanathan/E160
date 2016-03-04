@@ -667,7 +667,10 @@ namespace DrRobot.JaguarControl
             // particles[p]. Feel free to use the random.NextDouble() function. 
 	        // It might be helpful to use boundaries defined in the
 	        // Map.cs file (e.g. map.minX)
-	        
+
+            particles[p].x = map.minX + (map.maxX - map.minX) * random.NextDouble();
+            particles[p].y = map.minY + (map.maxY - map.minY) * random.NextDouble();
+            particles[p].t = -Math.PI + 2 * Math.PI * random.NextDouble();
 
 
 
