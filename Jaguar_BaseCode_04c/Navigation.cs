@@ -15,6 +15,8 @@ namespace DrRobot.JaguarControl
         public double x, y, t;
         public double x_est, y_est, t_est;
         public double desiredX, desiredY, desiredT;
+        double desiredX_prev, desiredY_prev, desiredT_prev;
+
 
         public double currentEncoderPulseL, currentEncoderPulseR;
         public double lastEncoderPulseL, lastEncoderPulseR;
@@ -55,6 +57,7 @@ namespace DrRobot.JaguarControl
         const double phoTrackingAccuracy = 0.10;
         double time = 0;
         DateTime startTime;
+        
 
         double std_l = 0;
         double std_r = 0;
@@ -97,6 +100,29 @@ namespace DrRobot.JaguarControl
             {
             }
         }
+
+        // ---- previous lab stuff
+
+        DateTime previousTimeL;
+        double measured_timestepL;
+        DateTime previousTimeR;
+        double measured_timestepR;
+
+        // PWM error globals
+        double errorLInt = 0;
+        double errorRInt = 0;
+        double wprevL = 0;
+        double wprevR = 0;
+        double signalL, signalR;
+
+        double rotRateLest = 0;
+        double rotRateRest = 0;
+
+        bool within_tracking = false;
+
+        // TrackTrajectory variables
+        private int traj_i = 0;
+
 
         #endregion
 
@@ -171,6 +197,17 @@ namespace DrRobot.JaguarControl
             laserAngles = new double[LaserData.Length];
             for (int i = 0; i < LaserData.Length; i++)                
                 laserAngles[i] = DrRobot.JaguarControl.JaguarCtrl.startAng + DrRobot.JaguarControl.JaguarCtrl.stepAng * i;
+
+            // stuff from previous labs
+            previousTimeL = DateTime.Now;
+            previousTimeR = DateTime.Now;
+            measured_timestepL = 0;
+            measured_timestepR = 0;
+
+            traj_i = 1;
+
+            bool within_tracking = false;
+
 
         }
 
@@ -406,6 +443,9 @@ namespace DrRobot.JaguarControl
         }
         public void CalcMotorSignals()
         {
+            short zeroOutput = 16383;
+            short maxPosOutput = 32767;
+
             // ****************** Additional Student Code: Start ************
 
             // Students must set motorSignalL and motorSignalR. Make sure
@@ -772,7 +812,7 @@ namespace DrRobot.JaguarControl
             desiredT = Math.Atan2(dy, dx);
         }
          * */
-        }
+        
 
         // THis function is called to construct a collision-free trajectory for the robot to follow
         private void PRMMotionPlanner()
@@ -893,8 +933,8 @@ namespace DrRobot.JaguarControl
                 double rand_r = wheelDistanceR + std_r*RandomGaussian();
 
                 // compute angle and distance travelled
-                randDistance = (rand_r + rand_l) / 2;
-                randAngle = (rand_r - rand_l) / (2 * robotRadius); 
+                double randDistance = (rand_r + rand_l) / 2;
+                double randAngle = (rand_r - rand_l) / (2 * robotRadius); 
 
                 // add this to a particle                
                 propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(t + randAngle/2);
@@ -907,7 +947,7 @@ namespace DrRobot.JaguarControl
                 else if (propagatedParticles[i].t < -Math.PI)
                     propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
 
-                propagatedParticles[i].w = CalculateWeight(i);
+                CalculateWeight(i);
 
             }
 
@@ -928,6 +968,8 @@ namespace DrRobot.JaguarControl
         {
 	        double weight = 0;
 
+            double testWallDist = map.GetClosestWallDistance(1, -2, Math.PI / 4);
+
 	        // ****************** Additional Student Code: Start ************
 
 	        // Put code here to calculated weight. Feel free to use the
@@ -941,12 +983,13 @@ namespace DrRobot.JaguarControl
             {
                 int laseriter =  (int)Math.Round(((double)i / numArcs)* (LaserData.Length));
                 double laserangle = laserAngles[laseriter];
-                double sensor_measurement = LaserData[laseriter];
+                double sensor_measurement = LaserData[laseriter]/1000;
                 double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, laserangle + propagatedParticles[p].t);
                 
                 double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma,2) ));
                 weight += prob;
             }
+            propagatedParticles[p].w = weight;
 
         }
 
