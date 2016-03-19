@@ -953,12 +953,43 @@ namespace DrRobot.JaguarControl
 
             // resample particles
 
+            int maxSamples = 10;
+            int[] sampled_inds = new int[numParticles * maxSamples];
 
+            double w_tot = 0; // find w_tot
+            for (int i = 0; i < numParticles; i++)
+            {
+                if (propagatedParticles[i].w > w_tot)
+                    w_tot = propagatedParticles[i].w;
+            }
 
+            int bufferLimit = 0;
+            for (int i = 0; i < numParticles; i++) // sample particles
+            {
+                double particlesToAdd_temp = (propagatedParticles[i].w / w_tot);
+                particlesToAdd_temp = (propagatedParticles[i].w / w_tot) * maxSamples;
+                int particlesToAdd = Math.Min((int)(particlesToAdd_temp) + 1, 10) ;
+                for (int j = bufferLimit; j < bufferLimit + particlesToAdd; j++)
+                    sampled_inds[j] = i;
+                bufferLimit += particlesToAdd;
+            }
 
+            for (int i = 0; i < numParticles; i++) // randomly sample from resampled
+            {
+                int j = random.Next(0, bufferLimit);
+                int p = sampled_inds[j];
+                particles[i] = propagatedParticles[p];
+            }
 
-
+            // average all particle states
             x_est = 0; y_est = 0; t_est = 0;
+            for (int i = 0; i < numParticles; i++)
+            {
+                x_est += particles[i].x / numParticles;
+                y_est += particles[i].y / numParticles;
+                t_est += particles[i].t / numParticles;
+            }
+            
 
 
             // ****************** Additional Student Code: End   ************
