@@ -110,7 +110,7 @@ namespace DrRobot.JaguarControl
         	double m_bot = Math.Tan(t);
         	double b_bot = y - m_bot*x;
 
-            double x_c = (b_bot - b_wall) / (m_wall - m_bot);
+            double x_c = m_wall == m_bot ? Double.PositiveInfinity : (b_bot - b_wall) / (m_wall - m_bot);
         	double y_c = m_wall*x_c+b_wall;
 
         	double x1 = mapSegmentCorners[segment, 0, 0];

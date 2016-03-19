@@ -951,6 +951,13 @@ namespace DrRobot.JaguarControl
 
             }
 
+            // resample particles
+
+
+
+
+
+
             x_est = 0; y_est = 0; t_est = 0;
 
 
