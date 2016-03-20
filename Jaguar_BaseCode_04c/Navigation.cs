@@ -58,9 +58,9 @@ namespace DrRobot.JaguarControl
         double time = 0;
         DateTime startTime;
         
-
-        double std_l = 0;
-        double std_r = 0;
+        // TODO MAKE THESE ACTUAL VALUES
+        double std_l = 0.5;
+        double std_r = 0.5;
 
         public short K_P = 15;//15;
         public short K_I = 0;//0;
@@ -850,6 +850,7 @@ namespace DrRobot.JaguarControl
             lastEncoderPulseR = currentEncoderPulseR;
             lastEncoderPulseL = currentEncoderPulseL;
 
+
             // correct for rollover
             diffEncoderPulseL = diffEncoderPulseL < -encoderMax / 2 ?
                 diffEncoderPulseL + encoderMax : diffEncoderPulseL;
@@ -925,60 +926,73 @@ namespace DrRobot.JaguarControl
 
             // Put code here to calculate x_est, y_est, t_est using a PF
 
-            // CHECK: IS IT THE SAME RANDOMNESS FOR EACH POINT?
+            bool weShouldReSample = (wheelDistanceL != 0) || (wheelDistanceR != 0);
 
-            // propogate particles using odomotery
-            for (int i=0; i< numParticles; i++){
-                double rand_l = wheelDistanceL + std_l*RandomGaussian();
-                double rand_r = wheelDistanceR + std_r*RandomGaussian();
-
-                // compute angle and distance travelled
-                double randDistance = (rand_r + rand_l) / 2;
-                double randAngle = (rand_r - rand_l) / (2 * robotRadius); 
-
-                // add this to a particle                
-                propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(t + randAngle/2);
-                propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(t + randAngle/2);
-                propagatedParticles[i].t = particles[i].t + randAngle;
-
-                // ensures that angle stays with -pi and pi
-                if (propagatedParticles[i].t > Math.PI)
-                    propagatedParticles[i].t = propagatedParticles[i].t - 2 * Math.PI;
-                else if (propagatedParticles[i].t < -Math.PI)
-                    propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
-
-                CalculateWeight(i);
-
-            }
-
-            // resample particles
-
-            int maxSamples = 10;
-            int[] sampled_inds = new int[numParticles * maxSamples];
-
-            double w_tot = 0; // find w_tot
-            for (int i = 0; i < numParticles; i++)
+            if (weShouldReSample)
             {
-                if (propagatedParticles[i].w > w_tot)
-                    w_tot = propagatedParticles[i].w;
-            }
 
-            int bufferLimit = 0;
-            for (int i = 0; i < numParticles; i++) // sample particles
-            {
-                double particlesToAdd_temp = (propagatedParticles[i].w / w_tot);
-                particlesToAdd_temp = (propagatedParticles[i].w / w_tot) * maxSamples;
-                int particlesToAdd = Math.Min((int)(particlesToAdd_temp) + 1, 10) ;
-                for (int j = bufferLimit; j < bufferLimit + particlesToAdd; j++)
-                    sampled_inds[j] = i;
-                bufferLimit += particlesToAdd;
-            }
+                // propogate particles using odomotery
+                for (int i=0; i< numParticles; i++){
+                    double rand_l = wheelDistanceL*(1 + std_l*RandomGaussian());
+                    double rand_r = wheelDistanceR*(1 + std_r*RandomGaussian());
 
-            for (int i = 0; i < numParticles; i++) // randomly sample from resampled
-            {
-                int j = random.Next(0, bufferLimit);
-                int p = sampled_inds[j];
-                particles[i] = propagatedParticles[p];
+                    // compute angle and distance travelled
+                    double randDistance = (rand_r + rand_l) / 2;
+                    double randAngle = (rand_r - rand_l) / (2 * robotRadius); 
+
+                    // add this to a particle                
+                    propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(particles[i].t + randAngle / 2);
+                    propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(particles[i].t + randAngle / 2);
+                    propagatedParticles[i].t = particles[i].t + randAngle;
+
+                    // ensures that angle stays with -pi and pi
+                    if (propagatedParticles[i].t > Math.PI)
+                        propagatedParticles[i].t = propagatedParticles[i].t - 2 * Math.PI;
+                    else if (propagatedParticles[i].t < -Math.PI)
+                        propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
+
+                    CalculateWeight(i);
+
+                }
+
+                /*
+                for (int i = 0; i < numParticles; i++) // TEST REMOVE THIS
+                {
+                    particles[i] = propagatedParticles[i];
+                }
+                */
+
+                // resample particles
+
+                int maxSamples = 10;
+                int[] sampled_inds = new int[numParticles * maxSamples];
+
+                double w_tot = 0; // find w_tot
+                for (int i = 0; i < numParticles; i++)
+                {
+                    if (propagatedParticles[i].w > w_tot)
+                        w_tot = propagatedParticles[i].w;
+                }
+
+                int bufferLimit = 0;
+                for (int i = 0; i < numParticles; i++) // sample particles
+                {
+                    double particlesToAdd_temp = (propagatedParticles[i].w / w_tot);
+                    particlesToAdd_temp = (propagatedParticles[i].w / w_tot) * maxSamples;
+                    int particlesToAdd = Math.Min((int)(particlesToAdd_temp) + 1, 10);
+                    for (int j = bufferLimit; j < bufferLimit + particlesToAdd; j++)
+                        sampled_inds[j] = i;
+                    bufferLimit += particlesToAdd;
+                }
+
+                for (int i = 0; i < numParticles; i++) // randomly sample from resampled
+                {
+                    int j = random.Next(0, bufferLimit);
+                    int p = sampled_inds[j];
+                    particles[i].x = propagatedParticles[p].x;
+                    particles[i].y = propagatedParticles[p].y;
+                    particles[i].t = propagatedParticles[p].t;
+                }
             }
 
             // average all particle states
@@ -1006,8 +1020,6 @@ namespace DrRobot.JaguarControl
         {
 	        double weight = 0;
 
-            double testWallDist = map.GetClosestWallDistance(1, -2, Math.PI / 4);
-
 	        // ****************** Additional Student Code: Start ************
 
 	        // Put code here to calculated weight. Feel free to use the
@@ -1016,17 +1028,18 @@ namespace DrRobot.JaguarControl
             double sigma = 0.3; // m (assumed)
 
             // take 8 arcs of the laser pi/4 apart
-            int numArcs = 8;
+            int numArcs = 20;
             for (int i = 0; i < numArcs; i++)
             {
                 int laseriter =  (int)Math.Round(((double)i / numArcs)* (LaserData.Length));
                 double laserangle = laserAngles[laseriter];
                 double sensor_measurement = LaserData[laseriter]/1000;
-                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, laserangle + propagatedParticles[p].t);
+                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y,  propagatedParticles[p].t -1.57 + laserangle);
                 
                 double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma,2) ));
                 weight += prob;
             }
+            
             propagatedParticles[p].w = weight;
 
         }
