@@ -926,34 +926,38 @@ namespace DrRobot.JaguarControl
 
             // Put code here to calculate x_est, y_est, t_est using a PF
 
-            bool weShouldReSample = (wheelDistanceL != 0) || (wheelDistanceR != 0);
+            // propogate particles using odomotery
+            for (int i = 0; i < numParticles; i++)
+            {
+                double rand_l = wheelDistanceL * (1 + std_l * RandomGaussian());
+                double rand_r = wheelDistanceR * (1 + std_r * RandomGaussian());
+
+                // compute angle and distance travelled
+                double randDistance = (rand_r + rand_l) / 2;
+                double randAngle = (rand_r - rand_l) / (2 * robotRadius);
+
+                // add this to a particle                
+                propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(particles[i].t + randAngle / 2);
+                propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(particles[i].t + randAngle / 2);
+                propagatedParticles[i].t = particles[i].t + randAngle;
+
+                // ensures that angle stays with -pi and pi
+                if (propagatedParticles[i].t > Math.PI)
+                    propagatedParticles[i].t = propagatedParticles[i].t - 2 * Math.PI;
+                else if (propagatedParticles[i].t < -Math.PI)
+                    propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
+
+                CalculateWeight(i);
+
+            }
+
+            bool weShouldReSample = ((wheelDistanceL != 0) || (wheelDistanceR != 0)) && newLaserData;
 
             if (weShouldReSample)
             {
+                // reset newLaserData
+                newLaserData = false;
 
-                // propogate particles using odomotery
-                for (int i=0; i< numParticles; i++){
-                    double rand_l = wheelDistanceL*(1 + std_l*RandomGaussian());
-                    double rand_r = wheelDistanceR*(1 + std_r*RandomGaussian());
-
-                    // compute angle and distance travelled
-                    double randDistance = (rand_r + rand_l) / 2;
-                    double randAngle = (rand_r - rand_l) / (2 * robotRadius); 
-
-                    // add this to a particle                
-                    propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(particles[i].t + randAngle / 2);
-                    propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(particles[i].t + randAngle / 2);
-                    propagatedParticles[i].t = particles[i].t + randAngle;
-
-                    // ensures that angle stays with -pi and pi
-                    if (propagatedParticles[i].t > Math.PI)
-                        propagatedParticles[i].t = propagatedParticles[i].t - 2 * Math.PI;
-                    else if (propagatedParticles[i].t < -Math.PI)
-                        propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
-
-                    CalculateWeight(i);
-
-                }
 
                 /*
                 for (int i = 0; i < numParticles; i++) // TEST REMOVE THIS
@@ -994,6 +998,15 @@ namespace DrRobot.JaguarControl
                     particles[i].t = propagatedParticles[p].t;
                 }
             }
+            else
+            {
+                for (int i = 0; i < numParticles; i++) // randomly sample from resampled
+                {
+                    particles[i].x = propagatedParticles[i].x;
+                    particles[i].y = propagatedParticles[i].y;
+                    particles[i].t = propagatedParticles[i].t;
+                }
+            }
 
             // average all particle states
             x_est = 0; y_est = 0; t_est = 0;
@@ -1025,7 +1038,7 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
-            double sigma = 0.3; // m (assumed)
+            double sigma = 0.1; // m (assumed)
 
             // take 8 arcs of the laser pi/4 apart
             int numArcs = 20;
@@ -1034,10 +1047,12 @@ namespace DrRobot.JaguarControl
                 int laseriter =  (int)Math.Round(((double)i / numArcs)* (LaserData.Length));
                 double laserangle = laserAngles[laseriter];
                 double sensor_measurement = LaserData[laseriter]/1000;
-                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y,  propagatedParticles[p].t -1.57 + laserangle);
+                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y,  propagatedParticles[p].t -Math.PI/2 + laserangle);
                 
-                double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma,2) ));
+                double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma * sensor_measurement,2) ));
                 weight += prob;
+
+                // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
             }
             
             propagatedParticles[p].w = weight;
