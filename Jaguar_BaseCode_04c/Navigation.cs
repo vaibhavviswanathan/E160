@@ -59,8 +59,8 @@ namespace DrRobot.JaguarControl
         DateTime startTime;
         
         // TODO MAKE THESE ACTUAL VALUES
-        double std_l = 0.5;
-        double std_r = 0.5;
+        double std_l = 0.8;
+        double std_r = 0.8;
 
         public short K_P = 15;//15;
         public short K_I = 0;//0;
@@ -83,6 +83,7 @@ namespace DrRobot.JaguarControl
         public Particle[] particles;
         public Particle[] propagatedParticles;
         public int numParticles = 1000;
+        public int numParticles_temp = 1000;
         public double K_wheelRandomness = 0.15;//0.25
         public Random random = new Random();
         public bool newLaserData = false;
@@ -400,7 +401,7 @@ namespace DrRobot.JaguarControl
 
                 // Get most recent laser scanner measurements
                 laserCounter = laserCounter + deltaT;
-                if (laserCounter >= 2000)
+                if (laserCounter >= 500)
                 {
                     for (int i = 0; i < LaserData.Length; i=i+laserStepSize)
                     {
@@ -925,6 +926,8 @@ namespace DrRobot.JaguarControl
             // ****************** Additional Student Code: Start ************
 
             // Put code here to calculate x_est, y_est, t_est using a PF
+            bool weShouldReSample = ((wheelDistanceL != 0) || (wheelDistanceR != 0)) && newLaserData;
+            newLaserData = false; // reset newLaserData
 
             // propogate particles using odomotery
             for (int i = 0; i < numParticles; i++)
@@ -947,24 +950,22 @@ namespace DrRobot.JaguarControl
                 else if (propagatedParticles[i].t < -Math.PI)
                     propagatedParticles[i].t = propagatedParticles[i].t + 2 * Math.PI;
 
-                CalculateWeight(i);
+                
 
             }
 
-            bool weShouldReSample = ((wheelDistanceL != 0) || (wheelDistanceR != 0)) && newLaserData;
 
             if (weShouldReSample)
             {
-                // reset newLaserData
-                newLaserData = false;
+                
 
 
-                /*
-                for (int i = 0; i < numParticles; i++) // TEST REMOVE THIS
+                
+                for (int i = 0; i < numParticles; i++)
                 {
-                    particles[i] = propagatedParticles[i];
+                    CalculateWeight(i);
                 }
-                */
+                
 
                 // resample particles
 
@@ -983,7 +984,7 @@ namespace DrRobot.JaguarControl
                 {
                     double particlesToAdd_temp = (propagatedParticles[i].w / w_tot);
                     particlesToAdd_temp = (propagatedParticles[i].w / w_tot) * maxSamples;
-                    int particlesToAdd = Math.Min((int)(particlesToAdd_temp) + 1, 10);
+                    int particlesToAdd = particlesToAdd_temp>0 ? Math.Min((int)(particlesToAdd_temp) + 1, 10) : 0;
                     for (int j = bufferLimit; j < bufferLimit + particlesToAdd; j++)
                         sampled_inds[j] = i;
                     bufferLimit += particlesToAdd;
@@ -1038,25 +1039,40 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
-            double sigma = 0.1; // m (assumed)
-
-            // take 8 arcs of the laser pi/4 apart
-            int numArcs = 20;
-            for (int i = 0; i < numArcs; i++)
+            if (inReachableSpace(p))
             {
-                int laseriter =  (int)Math.Round(((double)i / numArcs)* (LaserData.Length));
-                double laserangle = laserAngles[laseriter];
-                double sensor_measurement = LaserData[laseriter]/1000;
-                double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y,  propagatedParticles[p].t -Math.PI/2 + laserangle);
-                
-                double prob = 1/(sigma * Math.Sqrt(2*Math.PI) ) * Math.Exp( -Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma * sensor_measurement,2) ));
-                weight += prob;
 
-                // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
+                double sigma = 0.5; // m (assumed)
+
+                // take 8 arcs of the laser pi/4 apart
+                int numArcs = 5;
+                for (int i = 0; i < numArcs; i++)
+                {
+                    int laseriter = (int)Math.Round(((double)i / numArcs) * (LaserData.Length));
+                    double laserangle = laserAngles[laseriter];
+                    double sensor_measurement = LaserData[laseriter] / 1000;
+                    double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, propagatedParticles[p].t - Math.PI / 2 + laserangle);
+
+                    double prob = 1 / (sigma * Math.Sqrt(2 * Math.PI)) * Math.Exp(-Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma * minDist, 2)));
+                    if (sensor_measurement == 6.0) prob /= 10;
+                    weight += prob;
+
+                    // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
+                }
+
             }
-            
             propagatedParticles[p].w = weight;
 
+        }
+
+        bool inReachableSpace(int p)
+        {
+            double px = propagatedParticles[p].x;
+            double py = propagatedParticles[p].y;
+            bool IRS = (py < 2.794) && (py > -2.74); 
+            IRS &= (px < -3.55/2) ? (py > 0)||(py<-2.74) : true;
+            IRS &= (px > 3.55/2) ? (py > 0) || (py < -2.74) : true;
+            return true;
         }
 
 
@@ -1067,7 +1083,15 @@ namespace DrRobot.JaguarControl
 
         void InitializeParticles()
         {
-
+            numParticles = numParticles_temp;
+            particles = new Particle[numParticles];
+            propagatedParticles = new Particle[numParticles];
+            // Create particles
+            for (int i = 0; i < numParticles; i++)
+            {
+                particles[i] = new Particle();
+                propagatedParticles[i] = new Particle();
+            }
 
 	        // Set particles in random locations and orientations within environment
 	        for (int i=0; i< numParticles; i++){

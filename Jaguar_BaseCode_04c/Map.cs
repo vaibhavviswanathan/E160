@@ -35,7 +35,8 @@ namespace DrRobot.JaguarControl
             slopes = new double[numMapSegments];
             intercepts = new double[numMapSegments];
             segmentSizes = new double[numMapSegments];
-
+            
+            // xy xy
             mapSegmentCorners[0, 0, 0] = 3.38 + 5.79 + 3.55 / 2;
 	        mapSegmentCorners[0,0,1] = 2.794;
             mapSegmentCorners[0, 1, 0] = -3.38 - 5.79 - 3.55 / 2;

@@ -1217,7 +1217,7 @@ namespace DrRobot.JaguarControl
         
         private void btnReset_Click(object sender, EventArgs e)
         {
-            navigation.numParticles = int.Parse(txtNumParticles.Text);
+            navigation.numParticles_temp = int.Parse(txtNumParticles.Text);
             navigation.Reset();
         }
         
