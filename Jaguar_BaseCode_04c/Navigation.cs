@@ -562,9 +562,11 @@ namespace DrRobot.JaguarControl
         {
             if (loggingOn)
             {
+                double centralLaserRange = LaserData[113];
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
-                 String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString() ;
+                String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString()
+                    + " " + x_est.ToString() + " " + y_est.ToString() + " " + t_est.ToString();
 
                 logFile.WriteLine(newData);
             }
@@ -1039,10 +1041,11 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
-            if (inReachableSpace(p))
+            if (inReachableSpace(p) || true)
             {
 
-                double sigma = 0.5; // m (assumed)
+                double sigma_laser_percent = 0.01; // ( 1%, from datasheet);
+                double sigma_wall = 0.03; // cm
 
                 // take 8 arcs of the laser pi/4 apart
                 int numArcs = 5;
@@ -1053,11 +1056,14 @@ namespace DrRobot.JaguarControl
                     double sensor_measurement = LaserData[laseriter] / 1000;
                     double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, propagatedParticles[p].t - Math.PI / 2 + laserangle);
 
-                    double prob = 1 / (sigma * Math.Sqrt(2 * Math.PI)) * Math.Exp(-Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma * minDist, 2)));
-                    if (sensor_measurement == 6.0) prob /= 10;
+                    double sigma_laser = Math.Max(0.01, sigma_laser_percent * sensor_measurement);
+                    double sigma = Math.Sqrt(Math.Pow(sigma_laser,2) + Math.Pow(sigma_wall,2));
+
+                    double prob = 1 / (sigma * Math.Sqrt(2 * Math.PI)) * Math.Exp(-Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma, 2)));
+                    if (sensor_measurement == 6.0) prob /= 10; // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
                     weight += prob;
 
-                    // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
+                    
                 }
 
             }
