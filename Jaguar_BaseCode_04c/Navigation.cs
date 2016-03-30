@@ -59,8 +59,8 @@ namespace DrRobot.JaguarControl
         DateTime startTime;
         
         // TODO MAKE THESE ACTUAL VALUES
-        double std_l = 0.8;
-        double std_r = 0.8;
+        double std_l = 1.2;
+        double std_r = 1.2;
 
         public short K_P = 15;//15;
         public short K_I = 0;//0;
@@ -91,7 +91,8 @@ namespace DrRobot.JaguarControl
         public double laserMinRange = 0.2;
         public double[] laserAngles;
         private int laserCounter;
-        private int laserStepSize = 3;
+        private int laserStepSize = 1;
+        private double w_tot = 1;
 
         public class Particle
         {
@@ -934,14 +935,22 @@ namespace DrRobot.JaguarControl
             // propogate particles using odomotery
             for (int i = 0; i < numParticles; i++)
             {
-                double rand_l = wheelDistanceL * (1 + std_l * RandomGaussian());
-                double rand_r = wheelDistanceR * (1 + std_r * RandomGaussian());
+                double rand_l = wheelDistanceL * (1 + std_l * RandomGaussian() / w_tot);
+                double rand_r = wheelDistanceR * (1 + std_r * RandomGaussian() / w_tot);
 
                 // compute angle and distance travelled
                 double randDistance = (rand_r + rand_l) / 2;
                 double randAngle = (rand_r - rand_l) / (2 * robotRadius);
 
-                // add this to a particle                
+                // add this to a particle 
+                if (propagatedParticles[i].Equals(null))
+                {
+                    Console.Write(' ');
+                }
+                if (particles[i].Equals(null))
+                {
+                    Console.Write(' ');
+                }
                 propagatedParticles[i].x = particles[i].x + randDistance * Math.Cos(particles[i].t + randAngle / 2);
                 propagatedParticles[i].y = particles[i].y + randDistance * Math.Sin(particles[i].t + randAngle / 2);
                 propagatedParticles[i].t = particles[i].t + randAngle;
@@ -974,7 +983,7 @@ namespace DrRobot.JaguarControl
                 int maxSamples = 10;
                 int[] sampled_inds = new int[numParticles * maxSamples];
 
-                double w_tot = 0; // find w_tot
+                // double w_tot = 0; // find w_tot
                 for (int i = 0; i < numParticles; i++)
                 {
                     if (propagatedParticles[i].w > w_tot)
@@ -1041,7 +1050,7 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
-            if (inReachableSpace(p) || true)
+            if (inReachableSpace(p))
             {
 
                 double sigma_laser_percent = 0.01; // ( 1%, from datasheet);
@@ -1053,14 +1062,14 @@ namespace DrRobot.JaguarControl
                 {
                     int laseriter = (int)Math.Round(((double)i / numArcs) * (LaserData.Length));
                     double laserangle = laserAngles[laseriter];
-                    double sensor_measurement = LaserData[laseriter] / 1000;
+                    double sensor_measurement = (double)(LaserData[laseriter]) / 1000;
                     double minDist = map.GetClosestWallDistance(propagatedParticles[p].x, propagatedParticles[p].y, propagatedParticles[p].t - Math.PI / 2 + laserangle);
 
                     double sigma_laser = Math.Max(0.01, sigma_laser_percent * sensor_measurement);
-                    double sigma = Math.Sqrt(Math.Pow(sigma_laser,2) + Math.Pow(sigma_wall,2));
+                    double sigma = 5*Math.Sqrt(Math.Pow(sigma_laser,2) + Math.Pow(sigma_wall,2));
 
-                    double prob = 1 / (sigma * Math.Sqrt(2 * Math.PI)) * Math.Exp(-Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma, 2)));
-                    if (sensor_measurement == 6.0) prob /= 10; // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
+                    double prob = 1 / (Math.Sqrt(2 * Math.PI)) * Math.Exp(-Math.Pow(sensor_measurement - minDist, 2) / (2 * Math.Pow(sigma, 2)));
+                    if (sensor_measurement == 6.0) prob /= 1000; // range at infinity is 6.0. getting 6.0 and 6.0 shouldnt give you a perfect match.
                     weight += prob;
 
                     
