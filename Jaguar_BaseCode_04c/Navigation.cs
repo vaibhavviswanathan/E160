@@ -104,6 +104,8 @@ namespace DrRobot.JaguarControl
             }
         }
 
+        public bool stpBtnPressed;
+
         // ---- previous lab stuff
 
         DateTime previousTimeL;
@@ -213,6 +215,7 @@ namespace DrRobot.JaguarControl
             traj_i = 1;
 
             bool within_tracking = false;
+            stpBtnPressed = false;
 
 
         }
@@ -574,7 +577,11 @@ namespace DrRobot.JaguarControl
                     + " " + x_est.ToString() + " " + y_est.ToString() + " " + t_est.ToString()
                     + " " + x_est_var.ToString() + " " + y_est_var.ToString() + " " + xy_est_covar.ToString();
 
-                logFile.WriteLine(newData);
+                if (stpBtnPressed)
+                {
+                    logFile.WriteLine(newData);
+                    stpBtnPressed = false;
+                }
             }
         }
         #endregion

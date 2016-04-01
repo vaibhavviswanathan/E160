@@ -1,8 +1,8 @@
-function [ h ] = plotMap( )
+function [ h ] = plotMap( h )
 %UNTITLED3 Summary of this function goes here
 %   Detailed explanation goes here
 
-h = figure();
+h = figure(h);
 
 x1 = [3.38 + 5.79 + 3.55 /2 , -3.38 - 5.79 - 3.55 / 2];
 y1 = [2.794, 2.794];
