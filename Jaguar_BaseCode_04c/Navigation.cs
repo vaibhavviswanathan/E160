@@ -14,6 +14,7 @@ namespace DrRobot.JaguarControl
         public double initialX, initialY, initialT;
         public double x, y, t;
         public double x_est, y_est, t_est;
+        private double x_est_var, y_est_var, xy_est_covar;
         public double desiredX, desiredY, desiredT;
         double desiredX_prev, desiredY_prev, desiredT_prev;
 
@@ -169,6 +170,9 @@ namespace DrRobot.JaguarControl
             x_est = 0;//initialX;
             y_est = 0;//initialY;
             t_est = 0;//initialT;
+            x_est_var = 0;
+            y_est_var = 0;
+            xy_est_covar = 0;
 
             // Set desired state
             desiredX = 0;// initialX;
@@ -567,7 +571,8 @@ namespace DrRobot.JaguarControl
                 TimeSpan ts = DateTime.Now - startTime;
                 time = ts.TotalSeconds;
                 String newData = time.ToString() + " " + x.ToString() + " " + y.ToString() + " " + t.ToString()
-                    + " " + x_est.ToString() + " " + y_est.ToString() + " " + t_est.ToString();
+                    + " " + x_est.ToString() + " " + y_est.ToString() + " " + t_est.ToString()
+                    + " " + x_est_var.ToString() + " " + y_est_var.ToString() + " " + xy_est_covar.ToString();
 
                 logFile.WriteLine(newData);
             }
@@ -1027,6 +1032,14 @@ namespace DrRobot.JaguarControl
                 x_est += particles[i].x / numParticles;
                 y_est += particles[i].y / numParticles;
                 t_est += particles[i].t / numParticles;
+            }
+
+            x_est_var = 0; y_est_var = 0; xy_est_covar = 0;
+            for (int i = 0; i < numParticles; i++)
+            {
+                x_est_var += Math.Pow(particles[i].x - x_est, 2) / (numParticles - 1);
+                y_est_var += Math.Pow(particles[i].y - y_est, 2) / (numParticles - 1);
+                xy_est_covar += (particles[i].x - x_est) * (particles[i].y - y_est) / (numParticles - 1);
             }
             
 
