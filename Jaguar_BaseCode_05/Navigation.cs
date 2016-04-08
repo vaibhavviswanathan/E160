@@ -789,9 +789,11 @@ namespace DrRobot.JaguarControl
 
 
             // Create and add the start Node
-
+            firstNode = Node(x_est, y_est, 0, 0);
+            AddNode(firstNode);
 
             // Create the goal node
+            Node(desiredX, desiredY, 0, 0);
 
 
             // Loop until path created
