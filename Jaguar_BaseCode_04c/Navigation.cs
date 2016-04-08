@@ -577,7 +577,7 @@ namespace DrRobot.JaguarControl
                     + " " + x_est.ToString() + " " + y_est.ToString() + " " + t_est.ToString()
                     + " " + x_est_var.ToString() + " " + y_est_var.ToString() + " " + xy_est_covar.ToString();
 
-                if (stpBtnPressed)
+                if (stpBtnPressed || true)
                 {
                     logFile.WriteLine(newData);
                     stpBtnPressed = false;
@@ -1070,7 +1070,7 @@ namespace DrRobot.JaguarControl
 	        // Put code here to calculated weight. Feel free to use the
 	        // function map.GetClosestWallDistance from Map.cs.
 
-            if (inReachableSpace(p))
+            if (inReachableSpace(p) || true)
             {
 
                 double sigma_laser_percent = 0.01; // ( 1%, from datasheet);
@@ -1172,9 +1172,15 @@ namespace DrRobot.JaguarControl
 
         // For particle p, this function will select a start predefined position. 
         void SetStartPos(int p){
+            /*
 	        particles[p].x = initialX;
 	        particles[p].y = initialY;
 	        particles[p].t = initialT;
+             */
+            particles[p].x = 1; ;
+            particles[p].y = -3;
+            particles[p].t = 0.2;
+
         }
 
 
