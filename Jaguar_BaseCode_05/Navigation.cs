@@ -15,6 +15,7 @@ namespace DrRobot.JaguarControl
         public double x, y, t;
         public double x_est, y_est, t_est;
         public double x_des, y_des, t_des;
+        private double x_est_var, y_est_var, xy_est_covar;
         public double desiredX, desiredY, desiredT;
         double desiredX_prev, desiredY_prev, desiredT_prev;
 
@@ -58,6 +59,10 @@ namespace DrRobot.JaguarControl
         double time = 0;
         DateTime startTime;
 
+        // TODO MAKE THESE ACTUAL VALUES
+        double std_l = 1.2;
+        double std_r = 1.2;
+
         public short K_P = 15;//15;
         public short K_I = 0;//0;
         public short K_D = 3;//3;
@@ -87,7 +92,8 @@ namespace DrRobot.JaguarControl
         public double laserMinRange = 0.2;
         public double[] laserAngles;
         private int laserCounter;
-        private int laserStepSize = 3;
+        private int laserStepSize = 1;
+        private double w_tot = 1;
 
         public class Particle
         {
@@ -210,6 +216,10 @@ namespace DrRobot.JaguarControl
             x_est = 0;//initialX;
             y_est = 0;//initialY;
             t_est = 0;//initialT;
+
+            x_est_var = 0;
+            y_est_var = 0;
+            xy_est_covar = 0;
 
             // Set desired state
             desiredX = 0;// initialX;
@@ -643,8 +653,10 @@ namespace DrRobot.JaguarControl
             // ****************** Additional Student Code: Start ************
 
             // Calculate delta X and delta Y
-            double delta_x = desiredX - x;
-            double delta_y = desiredY - y;
+            //double delta_x = desiredX - x;
+            //double delta_y = desiredY - y;
+            double delta_x = x_des - x;
+            double delta_y = y_des - y;
 
             // Calculate state
             double pho = Math.Sqrt(Math.Pow(delta_x, 2) + Math.Pow(delta_y, 2));
@@ -755,7 +767,7 @@ namespace DrRobot.JaguarControl
         private void TrackTrajectory()
         {
             double distToCurrentNode = Math.Sqrt(Math.Pow(x_est - trajList[trajCurrentNode].x, 2) + Math.Pow(y_est - trajList[trajCurrentNode].y, 2));
-            if (distToCurrentNode < 0.1 && trajCurrentNode + 1 < trajSize)
+            if (distToCurrentNode < 0.3 && trajCurrentNode + 1 < trajSize)
             {
                 trajCurrentNode++;
                 x_des = trajList[trajCurrentNode].x;
@@ -789,11 +801,11 @@ namespace DrRobot.JaguarControl
 
 
             // Create and add the start Node
-            firstNode = Node(x_est, y_est, 0, 0);
+            Node firstNode = new Node(x_est, y_est, 0, 0);
             AddNode(firstNode);
 
             // Create the goal node
-            Node(desiredX, desiredY, 0, 0);
+            Node goalNode = new Node(desiredX, desiredY, 0, 0);
 
 
             // Loop until path created
@@ -807,16 +819,46 @@ namespace DrRobot.JaguarControl
 
             while (iterations < maxIterations && !pathFound)
             {
+                int randCellNumber = randGenerator.Next(0, numOccupiedCells);
+                int randNodeNumber = randGenerator.Next(0, numNodesInCell[occupiedCellsList[randCellNumber]]);
 
+                Node randExpansionNode = NodesInCells[occupiedCellsList[randCellNumber], randNodeNumber];
                 
+                
+                // Compute random distance for expanded node
+                double randDist = 5.0*randGenerator.NextDouble();
+                double randOrientation = -Math.PI + 2*Math.PI * randGenerator.NextDouble();
+
+                // Determine x and y position of expanded node
+                double newX = randExpansionNode.x + randDist * Math.Cos(randOrientation);
+                double newY = randExpansionNode.y + randDist * Math.Sin(randOrientation);
+
+                Node newNode = new Node(newX, newY, numNodes, randExpansionNode.nodeIndex);
+
+                // Check for collisions
+                if (!map.CollisionFound(randExpansionNode, newNode, robotRadius))
+                {
+                    AddNode(newNode); //TODO create tolerance
+
+                    // Check connection to goal
+                    if (!map.CollisionFound(newNode, goalNode, robotRadius))
+                    {
+                        goalNode.nodeIndex = numNodes;
+                        goalNode.lastNode = newNode.nodeIndex;
+                        AddNode(goalNode);
+                        pathFound = true;
+                    }
+                }
 
                 // Increment number of iterations
                 iterations++;
             }
 
 
+
+
             // Create the trajectory to follow
-            //BuildTraj(goalNode);
+            BuildTraj(goalNode);
 
             
             // ****************** Additional Student Code: End   ************
@@ -902,9 +944,95 @@ namespace DrRobot.JaguarControl
             trajSize = i;
             trajCurrentNode = 0;
 
+            OptimizeTraj();
+
             return;
         }
 
+        void OptimizeTraj(){
+            Tuple<double, int[]> optTrajAuxOut = OptimizeTrajAux(0, new int[0]);
+            int [] trajListInts = optTrajAuxOut.Item2;
+            Node[] trajListTemp = new Node[trajListInts.Length];
+            for (int i = 0; i < trajListInts.Length; i++)
+            {
+                trajListTemp[i] = trajList[trajListInts[i]];
+            }
+            trajList = trajListTemp;
+            trajSize = trajList.Length-1;
+            trajCurrentNode = 0;
+
+
+            return;
+        }
+
+        public class Tuple<T, U>
+        {
+            public T Item1 { get; private set; }
+            public U Item2 { get; private set; }
+
+            public Tuple(T item1, U item2)
+            {
+                Item1 = item1;
+                Item2 = item2;
+            }
+        }
+
+        // This function returns the sum of squared distances from node to goal
+        Tuple<double, int[]> OptimizeTrajAux(int trajNode, int[] trajNodeParents)
+        {
+            Node currentNode = trajList[trajNode];
+            Node nextNode;
+            int[] trajNodesFinal;
+            // see if you can go straight to goal
+            if (!map.CollisionFound(trajList[trajNode], trajList[trajSize-1], robotRadius))
+            {
+                nextNode = trajList[trajSize-1];
+                // calculate squared distance to goal
+                double dist = Math.Pow(nextNode.x - currentNode.x, 2) + Math.Pow(nextNode.y - currentNode.y, 2);
+                // make final trajectory array
+                trajNodesFinal = new int[trajNodeParents.Length + 2];
+                for (int i = 0; i < trajNodeParents.Length; i++)
+                    trajNodesFinal[i] = trajNodeParents[i];
+                trajNodesFinal[trajNodesFinal.Length - 2] = trajNode;
+                trajNodesFinal[trajNodesFinal.Length - 1] = trajSize-1;
+                return new Tuple<double,int[]>(dist, trajNodesFinal);
+            }
+            // else check each node in trajList /parents and pick shortest
+            double minDist = double.PositiveInfinity;
+            int[] completedPath = new int[1];
+
+            // make copy of parents node to feed to possible children
+            int[] trajNodeParentsNew = new int[trajNodeParents.Length + 1];
+            for(int i = 0; i<trajNodeParents.Length; i++)
+                trajNodeParentsNew[i] = trajNodeParents[i];
+            trajNodeParentsNew[trajNodeParentsNew.Length - 1] = trajNode;
+
+            for (int i = 0; i < trajSize-1; i++)
+            {
+                // check if next node is one of the parents or self
+                if (i == trajNode) continue;
+                bool letsContinue = false;
+                for (int j = 0; j < trajNodeParents.Length; j++)
+                {
+                    if (i == trajNodeParents[j]) letsContinue = true; ;
+                }
+                if (letsContinue) continue;
+                nextNode = trajList[i];
+                if(map.CollisionFound(trajList[trajNode], trajList[trajSize-1], robotRadius)) continue;
+                // else compare i's dist to minDist
+                Tuple<double, int[]> trialNodeOutput = OptimizeTrajAux(i, trajNodeParentsNew);
+                double dist = trialNodeOutput.Item1;
+                dist += Math.Pow(nextNode.x - currentNode.x, 2) + Math.Pow(nextNode.y - currentNode.y, 2); // add distance to i
+                int[] nextPath = trialNodeOutput.Item2;
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    completedPath = nextPath;
+                }
+
+            }
+            return new Tuple<double,int[]>(minDist,completedPath);
+        }
 
  
 
@@ -1173,6 +1301,16 @@ namespace DrRobot.JaguarControl
 
         }
 
+        bool inReachableSpace(int p)
+        {
+            double px = propagatedParticles[p].x;
+            double py = propagatedParticles[p].y;
+            bool IRS = (py < 2.794) && (py > -2.74);
+            IRS &= (px < -3.55 / 2) ? (py > 0) || (py < -2.74) : true;
+            IRS &= (px > 3.55 / 2) ? (py > 0) || (py < -2.74) : true;
+            return true;
+        }
+
 
 
         // This function is used to initialize the particle states 
@@ -1216,18 +1354,16 @@ namespace DrRobot.JaguarControl
 
         void SetRandomPos(int p){
 
-	        // ****************** Additional Student Code: Start ************
+            // ****************** Additional Student Code: Start ************
 
-	        // Put code here to calculated the position, orientation of 
+            // Put code here to calculated the position, orientation of 
             // particles[p]. Feel free to use the random.NextDouble() function. 
-	        // It might be helpful to use boundaries defined in the
-	        // Map.cs file (e.g. map.minX)
-           
+            // It might be helpful to use boundaries defined in the
+            // Map.cs file (e.g. map.minX)
 
-
-            particles[p].x = 0;
-            particles[p].y = 0;
-            particles[p].t = 0;
+            particles[p].x = map.minX + (map.maxX - map.minX) * random.NextDouble();
+            particles[p].y = map.minY + (map.maxY - map.minY) * random.NextDouble();
+            particles[p].t = -Math.PI + 2 * Math.PI * random.NextDouble();
 
 
 

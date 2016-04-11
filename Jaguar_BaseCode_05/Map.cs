@@ -104,12 +104,37 @@ namespace DrRobot.JaguarControl
         // SENSOR ORIENTATION (t)
         double GetWallDistance(double x, double y, double t, int segment){
 
+            double m_wall = slopes[segment];
+            double b_wall = intercepts[segment];
+            double size = segmentSizes[segment];
+
+            double m_bot = Math.Tan(t);
+            double b_bot = y - m_bot * x;
+
+            double x_c = m_wall == m_bot ? 100000000000 : (b_bot - b_wall) / (m_wall - m_bot);
+            double y_c = m_wall * x_c + b_wall;
+
+            double x1 = mapSegmentCorners[segment, 0, 0];
+            double x2 = mapSegmentCorners[segment, 1, 0];
+
+            double y1 = mapSegmentCorners[segment, 0, 1];
+            double y2 = mapSegmentCorners[segment, 1, 1];
+
+            double tol = 0.001;
+
+            bool validSeg = ((x_c >= Math.Min(x1, x2) - tol) && (x_c <= Math.Max(x1, x2) + tol)) && ((y_c >= Math.Min(y1, y2) - tol) && (y_c <= Math.Max(y1, y2) + tol));
+
+            // check if in right heading of the robot
+            validSeg &= (Math.Sign(t) == Math.Sign(Math.Atan2(y_c - y, x_c - x)));
+
+            double wallDist = validSeg ? Math.Sqrt(Math.Pow((x_c - x), 2) + Math.Pow((y_c - y), 2)) : Double.PositiveInfinity;
 
 
 
-	        // ****************** Additional Student Code: End   ************
+            // ****************** Additional Student Code: End   ************
 
-	        return 0;
+            return wallDist;
+
         }
 
 
@@ -119,18 +144,25 @@ namespace DrRobot.JaguarControl
 
         public double GetClosestWallDistance(double x, double y, double t){
 
-	        double minDist = 6.000;
+            double minDist = 6.000;
 
-	        // ****************** Additional Student Code: Start ************
+            // ****************** Additional Student Code: Start ************
 
-	        // Put code here that loops through segments, calling the
-	        // function GetWallDistance.
+            // Put code here that loops through segments, calling the
+            // function GetWallDistance.
+
+            int i;
+            for (i = 0; i < numMapSegments; i++)
+            {
+                double dist = GetWallDistance(x, y, t, i);
+                if (dist < minDist) minDist = dist;
+            }
 
 
 
-	        // ****************** Additional Student Code: End   ************
+            // ****************** Additional Student Code: End   ************
 
-	        return minDist;
+            return minDist;
         }
 
 
