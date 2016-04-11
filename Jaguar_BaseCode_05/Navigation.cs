@@ -944,14 +944,16 @@ namespace DrRobot.JaguarControl
             trajSize = i;
             trajCurrentNode = 0;
 
-            OptimizeTraj();
+            OptimizeTraj(); // comment this out to not use it.
 
             return;
         }
 
         void OptimizeTraj(){
+            // get the optimized trajectory from the aux function
             Tuple<double, int[]> optTrajAuxOut = OptimizeTrajAux(0, new int[0]);
             int [] trajListInts = optTrajAuxOut.Item2;
+            // copy the new trajectory into trajList
             Node[] trajListTemp = new Node[trajListInts.Length];
             for (int i = 0; i < trajListInts.Length; i++)
             {
@@ -965,7 +967,7 @@ namespace DrRobot.JaguarControl
             return;
         }
 
-        public class Tuple<T, U>
+        public class Tuple<T, U> // just generally useful, but lets us output 2 things from Aux
         {
             public T Item1 { get; private set; }
             public U Item2 { get; private set; }
@@ -1018,6 +1020,7 @@ namespace DrRobot.JaguarControl
                 }
                 if (letsContinue) continue;
                 nextNode = trajList[i];
+                // see if collision from going between nodes [this is painfully slow]
                 if(map.CollisionFound(trajList[trajNode], trajList[trajSize-1], robotRadius)) continue;
                 // else compare i's dist to minDist
                 Tuple<double, int[]> trialNodeOutput = OptimizeTrajAux(i, trajNodeParentsNew);
